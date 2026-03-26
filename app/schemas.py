@@ -103,6 +103,9 @@ class StoryOut(BaseModel):
     testing_criteria: str | None
     dependencies: str | None
     pr_url: str | None
+    pr_status: str | None = None
+    pr_checks: str | None = None
+    pr_review_state: str | None = None
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
@@ -253,6 +256,64 @@ class CollabPostOut(BaseModel):
     resolved: int
     created_at: datetime
     replies: list[CollabReplyOut] = []
+
+
+# --- Story Transition Log ---
+
+class StoryTransitionLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    story_id: int
+    from_status: str
+    to_status: str
+    agent_id: str
+    transitioned_at: datetime
+
+
+# --- Analytics ---
+
+class VelocityPeriod(BaseModel):
+    label: str
+    points: int
+
+class VelocityOut(BaseModel):
+    periods: list[VelocityPeriod]
+    total_points_completed: int
+
+class CycleTimeOut(BaseModel):
+    avg_hours: float
+    by_column: dict[str, float]
+
+class WorkloadItem(BaseModel):
+    agent_id: str
+    name: str
+    active: int
+    done_total: int
+    points_done: int
+
+class FeatureCompletionOut(BaseModel):
+    total: int
+    complete: int
+    in_progress: int
+    planning: int
+
+class StoriesSummaryOut(BaseModel):
+    total: int
+    by_status: dict[str, int]
+
+class AnalyticsOut(BaseModel):
+    velocity: VelocityOut
+    cycle_time: CycleTimeOut
+    workload: list[WorkloadItem]
+    feature_completion: FeatureCompletionOut
+    stories_summary: StoriesSummaryOut
+
+class DepStoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    status: str
+    assigned_to: str | None
 
 
 # --- Notifications ---

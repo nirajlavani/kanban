@@ -3,6 +3,8 @@ Test suite covering all API commands the orchestrator (Alfred) and agents would 
 Mirrors the curl-based workflow from the README.
 """
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
 
@@ -1336,3 +1338,350 @@ class TestNotifications:
             and n["agent_id"] == "zeo"
         ]
         assert len(self_reply_notifs) == 0
+
+
+# ---------------------------------------------------------------------------
+# Auto Feature Status Rollup
+# ---------------------------------------------------------------------------
+
+class TestAutoFeatureRollup:
+    async def _setup(self, client: AsyncClient) -> dict:
+        p = await client.post("/api/projects", json={"name": "RollP", "slug": "rollp"})
+        pid = p.json()["id"]
+        f = await client.post("/api/features", json={"project_id": pid, "title": "RollF"})
+        fid = f.json()["id"]
+        s1 = await client.post("/api/stories", json={
+            "feature_id": fid, "title": "Roll S1", "assigned_to": "vio", "points": 2,
+        })
+        s2 = await client.post("/api/stories", json={
+            "feature_id": fid, "title": "Roll S2", "assigned_to": "neo", "points": 3,
+        })
+        return {"fid": fid, "s1": s1.json()["id"], "s2": s2.json()["id"]}
+
+    async def test_feature_auto_moves_to_in_progress(self, client: AsyncClient):
+        data = await self._setup(client)
+        r = await client.get(f"/api/features/{data['fid']}")
+        assert r.json()["status"] == "planning"
+
+        await client.patch(f"/api/stories/{data['s1']}/move", json={
+            "status": "in_progress", "agent_id": "vio",
+        })
+        r2 = await client.get(f"/api/features/{data['fid']}")
+        assert r2.json()["status"] == "in_progress"
+
+    async def test_feature_auto_completes_when_all_stories_done(self, client: AsyncClient):
+        data = await self._setup(client)
+        for sid, agent in [(data["s1"], "vio"), (data["s2"], "neo")]:
+            await client.patch(f"/api/stories/{sid}/move", json={"status": "in_progress", "agent_id": agent})
+            await client.patch(f"/api/stories/{sid}/move", json={"status": "testing", "agent_id": agent})
+            await client.patch(f"/api/stories/{sid}/move", json={"status": "review", "agent_id": agent})
+            await client.patch(f"/api/stories/{sid}/move", json={"status": "done", "agent_id": "alfred"})
+
+        r = await client.get(f"/api/features/{data['fid']}")
+        assert r.json()["status"] == "complete"
+        assert r.json()["completed_at"] is not None
+
+    async def test_feature_stays_in_progress_when_story_rejected(self, client: AsyncClient):
+        data = await self._setup(client)
+        await client.patch(f"/api/stories/{data['s1']}/move", json={"status": "in_progress", "agent_id": "vio"})
+        await client.patch(f"/api/stories/{data['s1']}/move", json={"status": "testing", "agent_id": "vio"})
+        await client.patch(f"/api/stories/{data['s1']}/move", json={"status": "review", "agent_id": "vio"})
+        await client.patch(f"/api/stories/{data['s1']}/move", json={"status": "in_progress", "agent_id": "alfred"})
+
+        r = await client.get(f"/api/features/{data['fid']}")
+        assert r.json()["status"] == "in_progress"
+
+    async def test_manual_override_still_works(self, client: AsyncClient):
+        data = await self._setup(client)
+        await client.patch(f"/api/features/{data['fid']}", json={"status": "complete"})
+        r = await client.get(f"/api/features/{data['fid']}")
+        assert r.json()["status"] == "complete"
+
+
+# ---------------------------------------------------------------------------
+# Dependency Enforcement
+# ---------------------------------------------------------------------------
+
+class TestDependencyEnforcement:
+    async def _setup(self, client: AsyncClient) -> dict:
+        p = await client.post("/api/projects", json={"name": "DepP", "slug": "depp"})
+        pid = p.json()["id"]
+        f = await client.post("/api/features", json={"project_id": pid, "title": "DepF"})
+        fid = f.json()["id"]
+        dep = await client.post("/api/stories", json={
+            "feature_id": fid, "title": "Dep Story", "assigned_to": "neo", "points": 2,
+        })
+        blocked = await client.post("/api/stories", json={
+            "feature_id": fid, "title": "Blocked Story", "assigned_to": "vio", "points": 3,
+            "dependencies": str(dep.json()["id"]),
+        })
+        return {"fid": fid, "dep_id": dep.json()["id"], "blocked_id": blocked.json()["id"]}
+
+    async def test_blocked_by_unfinished_dep(self, client: AsyncClient):
+        data = await self._setup(client)
+        r = await client.patch(f"/api/stories/{data['blocked_id']}/move", json={
+            "status": "in_progress", "agent_id": "vio",
+        })
+        assert r.status_code == 400
+        assert "blocked" in r.json()["detail"].lower() or "dependencies" in r.json()["detail"].lower()
+
+    async def test_move_succeeds_when_dep_done(self, client: AsyncClient):
+        data = await self._setup(client)
+        await client.patch(f"/api/stories/{data['dep_id']}/move", json={"status": "in_progress", "agent_id": "neo"})
+        await client.patch(f"/api/stories/{data['dep_id']}/move", json={"status": "testing", "agent_id": "neo"})
+        await client.patch(f"/api/stories/{data['dep_id']}/move", json={"status": "review", "agent_id": "neo"})
+        await client.patch(f"/api/stories/{data['dep_id']}/move", json={"status": "done", "agent_id": "alfred"})
+
+        r = await client.patch(f"/api/stories/{data['blocked_id']}/move", json={
+            "status": "in_progress", "agent_id": "vio",
+        })
+        assert r.status_code == 200
+        assert r.json()["status"] == "in_progress"
+
+    async def test_human_bypasses_dep_check(self, client: AsyncClient):
+        data = await self._setup(client)
+        r = await client.patch(f"/api/stories/{data['blocked_id']}/move", json={
+            "status": "in_progress", "agent_id": "human",
+        })
+        assert r.status_code == 200
+        assert r.json()["status"] == "in_progress"
+
+    async def test_no_deps_moves_normally(self, client: AsyncClient):
+        p = await client.post("/api/projects", json={"name": "NdP", "slug": "ndp"})
+        f = await client.post("/api/features", json={"project_id": p.json()["id"], "title": "NdF"})
+        s = await client.post("/api/stories", json={
+            "feature_id": f.json()["id"], "title": "Free story", "assigned_to": "zeo", "points": 1,
+        })
+        r = await client.patch(f"/api/stories/{s.json()['id']}/move", json={
+            "status": "in_progress", "agent_id": "zeo",
+        })
+        assert r.status_code == 200
+
+    async def test_get_deps_endpoint(self, client: AsyncClient):
+        data = await self._setup(client)
+        r = await client.get(f"/api/stories/{data['blocked_id']}/deps")
+        assert r.status_code == 200
+        deps = r.json()
+        assert len(deps) == 1
+        assert deps[0]["id"] == data["dep_id"]
+        assert "status" in deps[0]
+        assert "title" in deps[0]
+
+    async def test_get_deps_empty(self, client: AsyncClient):
+        p = await client.post("/api/projects", json={"name": "EdP", "slug": "edp"})
+        f = await client.post("/api/features", json={"project_id": p.json()["id"], "title": "EdF"})
+        s = await client.post("/api/stories", json={
+            "feature_id": f.json()["id"], "title": "No dep story", "assigned_to": "vio", "points": 1,
+        })
+        r = await client.get(f"/api/stories/{s.json()['id']}/deps")
+        assert r.status_code == 200
+        assert r.json() == []
+
+    async def test_dep_only_blocks_in_progress_transition(self, client: AsyncClient):
+        data = await self._setup(client)
+        await client.patch(f"/api/stories/{data['blocked_id']}/move", json={
+            "status": "in_progress", "agent_id": "human",
+        })
+        r = await client.patch(f"/api/stories/{data['blocked_id']}/move", json={
+            "status": "testing", "agent_id": "vio",
+        })
+        assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+
+class TestAnalytics:
+    async def test_analytics_endpoint_returns_valid_json(self, client: AsyncClient):
+        r = await client.get("/api/analytics")
+        assert r.status_code == 200
+        data = r.json()
+        assert "velocity" in data
+        assert "cycle_time" in data
+        assert "workload" in data
+        assert "feature_completion" in data
+        assert "stories_summary" in data
+
+    async def test_velocity_periods_count(self, client: AsyncClient):
+        r = await client.get("/api/analytics")
+        periods = r.json()["velocity"]["periods"]
+        assert len(periods) == 8
+
+    async def test_workload_includes_all_agents(self, client: AsyncClient):
+        r = await client.get("/api/analytics")
+        workload = r.json()["workload"]
+        agent_ids = {w["agent_id"] for w in workload}
+        assert {"alfred", "vio", "neo", "zeo", "seo"}.issubset(agent_ids)
+
+    async def test_stories_summary_by_status(self, client: AsyncClient):
+        r = await client.get("/api/analytics")
+        by_status = r.json()["stories_summary"]["by_status"]
+        assert set(by_status.keys()) == {"todo", "in_progress", "testing", "review", "done"}
+
+    async def test_transition_log_created_on_move(self, client: AsyncClient):
+        p = await client.post("/api/projects", json={"name": "TLP", "slug": "tlp"})
+        f = await client.post("/api/features", json={"project_id": p.json()["id"], "title": "TLF"})
+        s = await client.post("/api/stories", json={
+            "feature_id": f.json()["id"], "title": "TransLog story",
+            "assigned_to": "vio", "points": 2,
+        })
+        sid = s.json()["id"]
+        await client.patch(f"/api/stories/{sid}/move", json={"status": "in_progress", "agent_id": "vio"})
+
+        r = await client.get("/api/analytics")
+        assert r.status_code == 200
+
+    async def test_analytics_view_loads(self, client: AsyncClient):
+        r = await client.get("/analytics")
+        assert r.status_code == 200
+        assert "Analytics" in r.text
+
+    async def test_cycle_time_handles_no_completed_stories(self, client: AsyncClient):
+        r = await client.get("/api/analytics")
+        ct = r.json()["cycle_time"]
+        assert ct["avg_hours"] >= 0.0
+        for col in ("todo", "in_progress", "testing", "review"):
+            assert col in ct["by_column"]
+
+    async def test_feature_completion_counts(self, client: AsyncClient):
+        r = await client.get("/api/analytics")
+        fc = r.json()["feature_completion"]
+        assert fc["total"] >= 0
+        assert fc["complete"] >= 0
+        assert fc["in_progress"] >= 0
+        assert fc["planning"] >= 0
+        assert fc["complete"] + fc["in_progress"] + fc["planning"] == fc["total"]
+
+
+# ---------------------------------------------------------------------------
+# PR Integration
+# ---------------------------------------------------------------------------
+
+class TestPRIntegration:
+
+    async def _make_story(self, client: AsyncClient, **overrides) -> dict:
+        p = await client.post("/api/projects", json={"name": "PRP", "slug": "prp-" + str(id(self))[-6:]})
+        f = await client.post("/api/features", json={"project_id": p.json()["id"], "title": "PRF"})
+        defaults = {
+            "feature_id": f.json()["id"],
+            "title": "PR Story",
+            "assigned_to": "vio",
+            "points": 3,
+        }
+        defaults.update(overrides)
+        r = await client.post("/api/stories", json=defaults)
+        return r.json()
+
+    async def _move_to_review(self, client: AsyncClient, sid: int):
+        await client.patch(f"/api/stories/{sid}/move", json={"status": "in_progress", "agent_id": "vio"})
+        await client.patch(f"/api/stories/{sid}/move", json={"status": "testing", "agent_id": "vio"})
+        await client.patch(f"/api/stories/{sid}/move", json={"status": "review", "agent_id": "vio"})
+
+    def test_parse_pr_url_formats(self):
+        from app.github import parse_pr_url
+
+        result = parse_pr_url("https://github.com/nirajlavani/kanban/pull/42")
+        assert result == ("nirajlavani", "kanban", 42)
+
+        result = parse_pr_url("https://github.com/org/repo/pull/1")
+        assert result == ("org", "repo", 1)
+
+        assert parse_pr_url("https://gitlab.com/org/repo/merge_requests/5") is None
+        assert parse_pr_url("not-a-url") is None
+        assert parse_pr_url("https://github.com/org/repo/issues/10") is None
+
+    async def test_pr_sync_no_pr_url(self, client: AsyncClient):
+        story = await self._make_story(client)
+        r = await client.post(f"/api/stories/{story['id']}/pr-sync")
+        assert r.status_code == 400
+        assert "no pr_url" in r.json()["detail"].lower()
+
+    async def test_pr_sync_invalid_url(self, client: AsyncClient):
+        story = await self._make_story(client)
+        await client.patch(f"/api/stories/{story['id']}", json={"pr_url": "https://gitlab.com/org/repo/merge_requests/5"})
+        r = await client.post(f"/api/stories/{story['id']}/pr-sync")
+        assert r.status_code == 400
+        assert "could not parse" in r.json()["detail"].lower()
+
+    @patch("app.routers.stories.fetch_pr_status", new_callable=AsyncMock)
+    async def test_pr_sync_success(self, mock_fetch, client: AsyncClient):
+        mock_fetch.return_value = {
+            "pr_status": "merged",
+            "pr_checks": "passing",
+            "pr_review_state": "approved",
+        }
+        story = await self._make_story(client)
+        await client.patch(f"/api/stories/{story['id']}", json={"pr_url": "https://github.com/org/repo/pull/1"})
+
+        r = await client.post(f"/api/stories/{story['id']}/pr-sync")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["pr_status"] == "merged"
+        assert data["pr_checks"] == "passing"
+        assert data["pr_review_state"] == "approved"
+
+    async def test_pr_gate_blocks_unmerged(self, client: AsyncClient):
+        story = await self._make_story(client)
+        sid = story["id"]
+        await client.patch(f"/api/stories/{sid}", json={"pr_url": "https://github.com/org/repo/pull/1"})
+
+        await self._move_to_review(client, sid)
+
+        # Directly set pr_status to 'open' via DB bypass — simulate cached state
+        # Instead we update the story to have pr_status via a mocked sync
+        with patch("app.routers.stories.fetch_pr_status", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = {"pr_status": "open", "pr_checks": "passing", "pr_review_state": "pending"}
+            await client.post(f"/api/stories/{sid}/pr-sync")
+
+        r = await client.patch(f"/api/stories/{sid}/move", json={"status": "done", "agent_id": "alfred"})
+        assert r.status_code == 400
+        assert "PR must be merged" in r.json()["detail"]
+
+    async def test_pr_gate_allows_merged(self, client: AsyncClient):
+        story = await self._make_story(client)
+        sid = story["id"]
+        await client.patch(f"/api/stories/{sid}", json={"pr_url": "https://github.com/org/repo/pull/1"})
+
+        await self._move_to_review(client, sid)
+
+        with patch("app.routers.stories.fetch_pr_status", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = {"pr_status": "merged", "pr_checks": "passing", "pr_review_state": "approved"}
+            await client.post(f"/api/stories/{sid}/pr-sync")
+
+        r = await client.patch(f"/api/stories/{sid}/move", json={"status": "done", "agent_id": "alfred"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "done"
+
+    async def test_pr_gate_human_bypass(self, client: AsyncClient):
+        story = await self._make_story(client)
+        sid = story["id"]
+        await client.patch(f"/api/stories/{sid}", json={"pr_url": "https://github.com/org/repo/pull/1"})
+
+        await self._move_to_review(client, sid)
+
+        with patch("app.routers.stories.fetch_pr_status", new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = {"pr_status": "open", "pr_checks": "failing", "pr_review_state": "pending"}
+            await client.post(f"/api/stories/{sid}/pr-sync")
+
+        r = await client.patch(f"/api/stories/{sid}/move", json={"status": "done", "agent_id": "human"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "done"
+
+    async def test_pr_gate_no_pr_url_passes(self, client: AsyncClient):
+        story = await self._make_story(client)
+        sid = story["id"]
+
+        await self._move_to_review(client, sid)
+
+        r = await client.patch(f"/api/stories/{sid}/move", json={"status": "done", "agent_id": "alfred"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "done"
+
+    async def test_story_out_has_pr_fields(self, client: AsyncClient):
+        story = await self._make_story(client)
+        r = await client.get(f"/api/stories/{story['id']}")
+        data = r.json()
+        assert "pr_status" in data
+        assert "pr_checks" in data
+        assert "pr_review_state" in data

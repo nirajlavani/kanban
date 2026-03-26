@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Analytics — Lavani Labs{% endblock %}
+
+{% block content %}
+{% set data = analytics %}
+{% set vel = data.velocity %}
+{% set ct = data.cycle_time %}
+{% set wl = data.workload %}
+{% set fc = data.feature_completion %}
+{% set ss = data.stories_summary %}
+
+<h1 class="font-heading text-[26px] text-txt-primary mb-8">Analytics</h1>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+    <!-- Velocity -->
+    <div class="rounded-card card-shadow p-6" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <div class="flex items-center justify-between mb-5">
+            <h2 class="font-heading text-[18px] text-txt-primary">Velocity</h2>
+            <span class="text-[12px] font-mono font-bold px-3 py-1 rounded-full" style="background:rgba(99,102,241,0.25); color:#c5c8ff;">{{ vel.total_points_completed }} pts total</span>
+        </div>
+        {% set max_pts = vel.periods | map(attribute='points') | max %}
+        <div class="space-y-3">
+            {% for period in vel.periods %}
+            {% set bar_pct = ((period.points / max_pts * 100) | int) if max_pts > 0 else 0 %}
+            <div class="flex items-center gap-3">
+                <span class="text-[11px] font-mono text-txt-muted w-24 shrink-0 text-right">{{ period.label }}</span>
+                <div class="flex-1 h-6 rounded-btn overflow-hidden" style="background:rgba(255,255,255,0.03);">
+                    <div class="h-full rounded-btn flex items-center justify-end px-2 transition-all" style="width:{{ bar_pct }}%; min-width:{% if period.points > 0 %}24px{% else %}0{% endif %}; background:linear-gradient(90deg, #6366f1, #818cf8);">
+                        {% if period.points > 0 %}
+                        <span class="text-[10px] font-mono font-bold text-white">{{ period.points }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Cycle Time -->
+    <div class="rounded-card card-shadow p-6" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <div class="flex items-center justify-between mb-5">
+            <h2 class="font-heading text-[18px] text-txt-primary">Cycle Time</h2>
+            <span class="text-[12px] font-mono font-bold px-3 py-1 rounded-full" style="background:rgba(92,200,168,0.25); color:#a0f0d8;">{{ ct.avg_hours }}h avg</span>
+        </div>
+        {% set col_labels = {'todo': 'To Do', 'in_progress': 'In Progress', 'testing': 'Testing', 'review': 'Review'} %}
+        {% set col_colors = {'todo': '#b0b0b0', 'in_progress': '#818cf8', 'testing': '#f0d878', 'review': '#d4ccf8'} %}
+        {% set max_col_time = ct.by_column.values() | max %}
+        <div class="space-y-4">
+            {% for col_key in ['todo', 'in_progress', 'testing', 'review'] %}
+            {% set hours = ct.by_column.get(col_key, 0) %}
+            {% set bar_pct = ((hours / max_col_time * 100) | int) if max_col_time > 0 else 0 %}
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[12px] font-body font-medium" style="color:{{ col_colors.get(col_key, '#9a9a9a') }};">{{ col_labels.get(col_key, col_key) }}</span>
+                    <span class="text-[11px] font-mono font-semibold text-txt-muted">{{ hours }}h</span>
+                </div>
+                <div class="h-4 rounded-btn overflow-hidden" style="background:rgba(255,255,255,0.03);">
+                    <div class="h-full rounded-btn transition-all" style="width:{{ bar_pct }}%; min-width:{% if hours > 0 %}8px{% else %}0{% endif %}; background:{{ col_colors.get(col_key, '#5a5a5a') }};"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+    <!-- Feature Completion -->
+    <div class="rounded-card card-shadow p-6" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <h2 class="font-heading text-[18px] text-txt-primary mb-5">Feature Completion</h2>
+        {% if fc.total > 0 %}
+        {% set comp_pct = (fc.complete / fc.total * 100) | round(1) %}
+        {% set prog_pct = (fc.in_progress / fc.total * 100) | round(1) %}
+        {% set plan_pct = (fc.planning / fc.total * 100) | round(1) %}
+        <div class="flex items-center justify-center mb-6">
+            <div class="relative" style="width:160px; height:160px;">
+                <div class="w-full h-full rounded-full" style="background:conic-gradient(#5cc8b4 0% {{ comp_pct }}%, #6366f1 {{ comp_pct }}% {{ comp_pct + prog_pct }}%, #5a5a5a {{ comp_pct + prog_pct }}% 100%);"></div>
+                <div class="absolute inset-4 rounded-full flex items-center justify-center" style="background:#161616;">
+                    <div class="text-center">
+                        <span class="font-heading text-[28px] text-txt-primary">{{ fc.total }}</span>
+                        <p class="text-[10px] text-txt-muted font-body">features</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="grid grid-cols-3 gap-4 text-center">
+            <div>
+                <span class="block font-heading text-[22px] text-txt-primary">{{ fc.complete }}</span>
+                <span class="text-[11px] font-body" style="color:#5cc8b4;">Complete</span>
+            </div>
+            <div>
+                <span class="block font-heading text-[22px] text-txt-primary">{{ fc.in_progress }}</span>
+                <span class="text-[11px] font-body" style="color:#818cf8;">In Progress</span>
+            </div>
+            <div>
+                <span class="block font-heading text-[22px] text-txt-primary">{{ fc.planning }}</span>
+                <span class="text-[11px] font-body" style="color:#5a5a5a;">Planning</span>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-center text-[13px] text-txt-muted font-body py-10">No features yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Story Status Breakdown -->
+    <div class="rounded-card card-shadow p-6" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <div class="flex items-center justify-between mb-5">
+            <h2 class="font-heading text-[18px] text-txt-primary">Stories</h2>
+            <span class="text-[12px] font-mono font-bold px-3 py-1 rounded-full" style="background:rgba(255,255,255,0.06); color:#9a9a9a;">{{ ss.total }} total</span>
+        </div>
+        {% set status_colors = {'todo': '#b0b0b0', 'in_progress': '#818cf8', 'testing': '#f0d878', 'review': '#d4ccf8', 'done': '#5cc8b4'} %}
+        {% set status_labels = {'todo': 'To Do', 'in_progress': 'In Progress', 'testing': 'Testing', 'review': 'Review', 'done': 'Done'} %}
+        {% if ss.total > 0 %}
+        <div class="flex h-6 rounded-btn overflow-hidden mb-4" style="background:rgba(255,255,255,0.03);">
+            {% for s in ['todo', 'in_progress', 'testing', 'review', 'done'] %}
+            {% set cnt = ss.by_status.get(s, 0) %}
+            {% if cnt > 0 %}
+            <div class="h-full flex items-center justify-center" style="width:{{ (cnt / ss.total * 100) | round(1) }}%; background:{{ status_colors.get(s, '#5a5a5a') }};">
+                {% if (cnt / ss.total * 100) > 8 %}
+                <span class="text-[9px] font-mono font-bold" style="color:#0d0d0d;">{{ cnt }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        <div class="grid grid-cols-5 gap-2 text-center">
+            {% for s in ['todo', 'in_progress', 'testing', 'review', 'done'] %}
+            <div>
+                <span class="block font-heading text-[20px] text-txt-primary">{{ ss.by_status.get(s, 0) }}</span>
+                <span class="text-[10px] font-body" style="color:{{ status_colors.get(s, '#5a5a5a') }};">{{ status_labels.get(s, s) }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-center text-[13px] text-txt-muted font-body py-10">No stories yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Agent Workload -->
+<div class="rounded-card card-shadow p-6 mb-8" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+    <h2 class="font-heading text-[18px] text-txt-primary mb-5">Agent Workload</h2>
+    {% set agent_colors = {'alfred': '#c9a24d', 'vio': '#b49ce8', 'neo': '#5cc8b4', 'zeo': '#68b8e0', 'seo': '#e8856a'} %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {% for agent in wl %}
+        {% set ac = agent_colors.get(agent.agent_id, '#6366f1') %}
+        <div class="rounded-card p-5 text-center" style="background:#1e1e1e; border:1px solid rgba(255,255,255,0.03);">
+            <div class="w-14 h-14 rounded-full mx-auto mb-3" style="background-image:url('/static/avatars/{{ agent.agent_id }}.png'); background-size:250%; background-position:50% 12%; background-repeat:no-repeat; border:2px solid {{ ac }};"></div>
+            <h3 class="font-heading text-[16px] text-txt-primary mb-1">{{ agent.name }}</h3>
+            <div class="grid grid-cols-3 gap-2 mt-3">
+                <div>
+                    <span class="block font-heading text-[18px]" style="color:{{ ac }};">{{ agent.active }}</span>
+                    <span class="text-[9px] font-body text-txt-muted">Active</span>
+                </div>
+                <div>
+                    <span class="block font-heading text-[18px]" style="color:{{ ac }};">{{ agent.done_total }}</span>
+                    <span class="text-[9px] font-body text-txt-muted">Done</span>
+                </div>
+                <div>
+                    <span class="block font-heading text-[18px]" style="color:{{ ac }};">{{ agent.points_done }}</span>
+                    <span class="text-[9px] font-body text-txt-muted">Pts</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

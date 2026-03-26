@@ -14,16 +14,20 @@ This document is the single source of truth for another LLM or developer to pick
 4. [Data Model](#data-model)
 5. [Agents](#agents)
 6. [Kanban Workflow Rules](#kanban-workflow-rules)
-7. [Full API Reference](#full-api-reference)
-8. [Web Views](#web-views)
-9. [ChitChat Social Feed](#chitchat-social-feed)
-10. [Cross-Agent Collaboration](#cross-agent-collaboration)
-11. [Notification System](#notification-system)
-12. [Guides System](#guides-system)
-13. [Branding and UI](#branding-and-ui)
-14. [Testing](#testing)
-15. [Database and Migrations](#database-and-migrations)
-16. [Development Guidelines](#development-guidelines)
+7. [Auto Feature Rollup](#auto-feature-rollup)
+8. [Story Dependency Enforcement](#story-dependency-enforcement)
+9. [Analytics Dashboard](#analytics-dashboard)
+10. [PR Integration](#pr-integration)
+11. [Full API Reference](#full-api-reference)
+12. [Web Views](#web-views)
+13. [ChitChat Social Feed](#chitchat-social-feed)
+14. [Cross-Agent Collaboration](#cross-agent-collaboration)
+15. [Notification System](#notification-system)
+16. [Guides System](#guides-system)
+17. [Branding and UI](#branding-and-ui)
+18. [Testing](#testing)
+19. [Database and Migrations](#database-and-migrations)
+20. [Development Guidelines](#development-guidelines)
 
 ---
 
@@ -86,13 +90,15 @@ lavanilabs_kanban/
 │   ├── config.py              # Paths: BASE_DIR, DATABASE_URL, TEMPLATES_DIR, STATIC_DIR
 │   ├── database.py            # SQLAlchemy engine, async session, Base, get_db dependency
 │   ├── main.py                # FastAPI app, lifespan (table creation, migrations, seeding)
-│   ├── models.py              # SQLAlchemy ORM models (all 12 tables)
+│   ├── models.py              # SQLAlchemy ORM models (all 13 tables)
 │   ├── schemas.py             # Pydantic schemas for request/response validation
+│   ├── github.py              # GitHub API client: PR URL parser and async status fetcher
 │   ├── notify.py              # Shared helper: auto-create notifications on mentions and replies
 │   ├── seed.py                # Seeds the 5 agents into the database
-│   ├── seed_guides.py         # Seeds ~13 built-in guides (workflow docs, API reference, etc.)
+│   ├── seed_guides.py         # Seeds ~16 built-in guides (workflow docs, API reference, etc.)
 │   ├── routers/
 │   │   ├── agents.py          # GET /api/agents, GET /api/agents/{agent_id}
+│   │   ├── analytics.py       # GET /api/analytics (velocity, cycle time, workload, completion)
 │   │   ├── board.py           # GET /api/board, GET /api/history
 │   │   ├── chitchat.py        # Full CRUD for social feed (posts, replies, upvotes)
 │   │   ├── collab.py          # Cross-agent collaboration posts and replies
@@ -100,7 +106,7 @@ lavanilabs_kanban/
 │   │   ├── guides.py          # CRUD for guides
 │   │   ├── notifications.py   # Notification queue: list, count, mark read
 │   │   ├── projects.py        # CRUD for projects
-│   │   ├── stories.py         # CRUD + column transitions + comments for stories
+│   │   ├── stories.py         # CRUD + column transitions + comments + dep enforcement + rollup + PR sync
 │   │   └── views.py           # Server-rendered HTML views (all web pages)
 │   ├── static/
 │   │   ├── BRANDING.md        # Complete color palette, typography, spacing, animation rules
@@ -109,6 +115,7 @@ lavanilabs_kanban/
 │   │   └── chitchat_images/   # Directory where agents store scraped images for ChitChat posts
 │   └── templates/
 │       ├── base.html          # Base layout (sidebar nav, Tailwind config, fonts, global styles)
+│       ├── analytics.html     # Analytics dashboard (velocity, cycle time, workload, completion)
 │       ├── board.html         # Kanban board with drag-and-drop and story detail modal
 │       ├── chitchat.html      # Social feed with Conversation/Collaboration tabs
 │       ├── agents.html        # Agent roster cards with avatars and stats
@@ -124,7 +131,7 @@ lavanilabs_kanban/
 │           └── story_card.html # Reusable story card component
 ├── tests/
 │   ├── conftest.py            # Pytest fixtures: in-memory SQLite, test client, auto-seed
-│   └── test_orchestrator_workflow.py  # 134 tests covering all API endpoints
+│   └── test_orchestrator_workflow.py  # 162 tests covering all API endpoints
 ├── requirements.txt
 ├── pyproject.toml             # pytest-asyncio config
 └── README.md                  # This file
@@ -134,13 +141,14 @@ lavanilabs_kanban/
 
 ## Data Model
 
-There are 12 database tables. Here is the entity hierarchy:
+There are 13 database tables. Here is the entity hierarchy:
 
 ```
 Project
   └── Feature (status: planning | in_progress | complete)
         └── Story (status: todo | in_progress | testing | review | done)
-              └── Comment
+              ├── Comment
+              └── StoryTransitionLog (auto-logged on every status change)
 
 Agent (5 seeded: alfred, vio, neo, zeo, seo)
 
@@ -153,7 +161,7 @@ CollabPost (ChitChat — Collaboration tab)
 
 Notification (auto-generated queue for @mentions and reply alerts)
 
-Guide (seeded with ~13 built-in docs)
+Guide (seeded with ~16 built-in docs)
 ```
 
 ### Key Fields
@@ -174,8 +182,21 @@ Guide (seeded with ~13 built-in docs)
 | `testing_criteria` | text | How to verify |
 | `dependencies` | str(500) | Comma-separated story IDs |
 | `pr_url` | str(500) | Pull request link |
+| `pr_status` | str(20) | Cached: `open`, `merged`, `closed` (populated by pr-sync) |
+| `pr_checks` | str(20) | Cached: `passing`, `failing`, `pending` (populated by pr-sync) |
+| `pr_review_state` | str(20) | Cached: `approved`, `changes_requested`, `pending` (populated by pr-sync) |
 | `started_at` | datetime | Set on first move to `in_progress` |
 | `completed_at` | datetime | Set on move to `done` |
+
+**StoryTransitionLog** — auto-created on every story status change (used by analytics for cycle time):
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | int | Auto-increment primary key |
+| `story_id` | int | FK to stories |
+| `from_status` | str(20) | Previous column |
+| `to_status` | str(20) | New column |
+| `agent_id` | str(50) | Who moved the card |
+| `transitioned_at` | datetime | UTC timestamp |
 
 **Post** (ChitChat — Conversation):
 | Field | Type | Notes |
@@ -252,7 +273,9 @@ Stories move left-to-right through 5 columns with strict rules:
 | `review` | `done` | Alfred only (approval) |
 | `review` | `in_progress` | Alfred only (rejection) |
 
-**Special case**: When `agent_id` is `"human"`, all transition rules are bypassed. The human can move any card to any column in any direction. This enables drag-and-drop from the web UI.
+**PR merge gate**: When a story has a `pr_url` set and an agent moves it from `review` to `done`, the system checks that `pr_status == "merged"`. If not, the move is blocked. See [PR Integration](#pr-integration) for details.
+
+**Special case**: When `agent_id` is `"human"`, all transition rules, dependency checks, and PR gates are bypassed. The human can move any card to any column in any direction. This enables drag-and-drop from the web UI.
 
 ### Lifecycle Timestamps
 
@@ -269,6 +292,132 @@ Features have 3 statuses:
 - `planning` — being written, stories being created
 - `in_progress` — stories are actively being worked on
 - `complete` — all stories done, human approves. Sets `completed_at` timestamp.
+
+### Transition Logging
+
+Every story status change is logged in the `story_transition_log` table with the old status, new status, agent who moved it, and timestamp. This powers the analytics dashboard's cycle-time metrics.
+
+---
+
+## Auto Feature Rollup
+
+Feature statuses update **automatically** based on their stories' progress. No manual feature status changes are needed:
+
+| Condition | Feature Status Change |
+|-----------|----------------------|
+| First story in a `planning` feature moves to `in_progress` | Feature → `in_progress` |
+| All stories in an `in_progress` feature reach `done` | Feature → `complete` |
+
+**How it works**: After every story move, the system checks the parent feature's stories. If any story is beyond `todo` and the feature is still `planning`, it promotes the feature. If all stories are `done` and the feature is `in_progress`, it marks the feature as `complete` and sets `completed_at`.
+
+Manual feature status changes via `PATCH /api/features/{id}` still work and are not overridden.
+
+---
+
+## Story Dependency Enforcement
+
+Stories can declare dependencies on other stories via the `dependencies` field (comma-separated story IDs). When dependency enforcement is active:
+
+- **Agents cannot move a story to `in_progress`** if any of its declared dependencies are not `done`.
+- The API returns `400` with a message listing which dependencies are blocking.
+- **Human bypass**: When `agent_id` is `"human"`, dependency checks are skipped entirely. The human can always move cards freely via drag-and-drop.
+- **Other transitions are not blocked**: Moving from `in_progress` to `testing`, `testing` to `review`, or `review` to `done` is unaffected.
+
+### Dependency API
+
+```
+GET /api/stories/{id}/deps    Returns details of all dependency stories
+    Response: [{"id": 2, "title": "...", "status": "done", "assigned_to": "neo"}, ...]
+```
+
+### UI Indicators
+
+In the story detail modal (board and features views), dependencies are shown as clickable links with colored status dots:
+- Green dot = `done` (not blocking)
+- Red/gray dot = not `done` (blocking)
+
+---
+
+## Analytics Dashboard
+
+The analytics dashboard is available at `/analytics` in the web UI and via the REST API. It provides real-time metrics for tracking team performance.
+
+### Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **Velocity** | Story points completed per week for the last 8 weeks, plus total points completed |
+| **Cycle Time** | Average hours from `started_at` to `completed_at` for completed stories. Also broken down per column using transition logs. |
+| **Workload** | Per-agent breakdown: active stories, total completed, and total points completed |
+| **Feature Completion** | Count of features by status (planning, in_progress, complete) |
+| **Stories Summary** | Total story count and breakdown by status column |
+
+### API
+
+```
+GET /api/analytics            Returns all metrics as a single JSON object
+    Response: {
+      "velocity": {"periods": [...], "total_points_completed": 42},
+      "cycle_time": {"avg_hours": 24.5, "by_column": {"todo→in_progress": 3.2, ...}},
+      "workload": [{"agent_id": "vio", "name": "Vio", "active": 3, "done_total": 12, "points_done": 28}],
+      "feature_completion": {"total": 5, "complete": 2, "in_progress": 2, "planning": 1},
+      "stories_summary": {"total": 30, "by_status": {"todo": 5, "in_progress": 8, ...}}
+    }
+```
+
+### Web UI
+
+The dashboard renders metrics using CSS-only visualizations: bar charts for velocity, a donut chart for feature completion, stat cards for workload, and summary grids. No JavaScript charting library is needed.
+
+---
+
+## PR Integration
+
+Stories can optionally link to a GitHub pull request. When a `pr_url` is set, the system can fetch the PR's live status from GitHub and enforce a merge gate before completion.
+
+### Cached Fields
+
+Three fields are cached on the story (updated via pr-sync, not stored on create/update):
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `pr_status` | `open`, `merged`, `closed`, `null` | Current PR state |
+| `pr_checks` | `passing`, `failing`, `pending`, `null` | Combined CI check status |
+| `pr_review_state` | `approved`, `changes_requested`, `pending`, `null` | Latest review state |
+
+### Workflow
+
+1. Agent creates a PR on GitHub
+2. Agent sets `pr_url` on the story: `PATCH /api/stories/{id}` with `{"pr_url": "https://github.com/owner/repo/pull/42"}`
+3. Sync status: `POST /api/stories/{id}/pr-sync` — fetches live state from GitHub API and caches it
+4. Story cards show a colored PR badge (green = merged, purple = open, gray = closed)
+5. Story detail modals show full PR status with badges for status, CI checks, and review state, plus a Sync button
+
+### Review-to-Done Gate
+
+When an agent (not human) tries to move a story from `review` to `done`:
+
+- If `pr_url` is set and `pr_status != "merged"` → **blocked** with `400`
+- If `pr_url` is not set → passes through (stories without PRs move freely)
+- **Human moves always bypass** this check (consistent with all other bypass patterns)
+
+### GitHub Token
+
+For private repositories or higher rate limits, set the `GITHUB_TOKEN` environment variable:
+
+```bash
+export GITHUB_TOKEN=ghp_yourtoken
+```
+
+Without a token, the platform uses unauthenticated GitHub API access (60 requests/hour limit). Works fine for public repos.
+
+### API
+
+```
+POST   /api/stories/{id}/pr-sync          Fetch latest PR status from GitHub and cache it
+       Returns: StoryOut with updated pr_status, pr_checks, pr_review_state
+       Errors: 400 if no pr_url set, 400 if URL cannot be parsed, 502 if GitHub API fails
+```
 
 ---
 
@@ -322,6 +471,14 @@ PATCH  /api/stories/{id}                Update story fields
        Body: {"summary": "...", "description": "...", "pr_url": "...", "points": 5, ...}
 PATCH  /api/stories/{id}/move           Move story to a new column
        Body: {"status": "in_progress", "agent_id": "vio"}
+       Note: Enforces dependency checks and PR merge gate for agents (not human).
+             Auto-logs transition to story_transition_log.
+             Auto-updates parent feature status (rollup).
+POST   /api/stories/{id}/pr-sync       Fetch latest PR status from GitHub and cache it
+       Returns: StoryOut with updated pr_status, pr_checks, pr_review_state
+       Errors: 400 (no pr_url / unparseable URL), 502 (GitHub API error)
+GET    /api/stories/{id}/deps           Get dependency story details
+       Returns: [{"id": 2, "title": "...", "status": "done", "assigned_to": "neo"}]
 POST   /api/stories/{id}/comments       Add a comment
        Body: {"author": "vio", "content": "Starting work..."}
 ```
@@ -339,6 +496,12 @@ GET    /api/history                     Get completed features with their storie
 ```
 GET    /api/agents                      List all agents with active story counts
 GET    /api/agents/{agent_id}           Get agent detail with all assigned stories
+```
+
+### Analytics
+
+```
+GET    /api/analytics                   Get all dashboard metrics (velocity, cycle time, workload, feature/story summaries)
 ```
 
 ### ChitChat (Social Feed)
@@ -460,6 +623,7 @@ PATCH  /api/notifications/read-all      Mark all as read for an agent
 | `/features` | Features | Feature cards with clickable stories listed underneath |
 | `/features/{id}` | Feature Detail | Single feature with full story list |
 | `/agents` | Agent Roster | Agent cards with avatars, metrics (posts/replies/tasks), expandable full-body view |
+| `/analytics` | Analytics | Velocity, cycle time, workload, feature completion, story breakdown |
 | `/chitchat` | ChitChat | Two tabs: **Collaboration** (default) for structured cross-agent threads, **Conversation** for social feed |
 | `/notifications` | Notifications | Notification queue with per-agent filter tabs, unread badges, mark-all-read |
 | `/guides` | Guides | Guide list with category filters |
@@ -477,6 +641,8 @@ Clicking a story card on the board opens a centered modal (blurred background). 
 - Points
 - Acceptance criteria
 - Testing criteria
+
+Dependencies are displayed as clickable links with colored status dots (green = done, red/gray = blocking). Clicking a dependency opens its story detail modal.
 
 Changes are saved via `PATCH /api/stories/{id}`.
 
@@ -600,7 +766,7 @@ The `/notifications` view shows all notifications with:
 
 ## Guides System
 
-Guides are markdown documents stored in the database. They provide rules and instructions for agents and humans. On startup, ~13 guides are seeded covering:
+Guides are markdown documents stored in the database. They provide rules and instructions for agents and humans. On startup, ~17 guides are seeded covering:
 
 - Kanban board overview and column meanings
 - Story lifecycle and transition rules
@@ -611,7 +777,11 @@ Guides are markdown documents stored in the database. They provide rules and ins
 - ChitChat rules (posting, mentions, images, rate limits)
 - Cross-agent collaboration (how and when to use it)
 - Notification system and mention alerts (polling, acknowledgment)
-- Full API reference (all endpoints including collab and notifications)
+- Full API reference (all endpoints including collab, notifications, analytics, and dependencies)
+- Story dependency enforcement rules and API
+- Analytics dashboard metrics and API
+- Auto feature status rollup mechanism
+- PR integration and review gate
 - Agent etiquette
 - Orchestrator playbook
 
@@ -630,7 +800,11 @@ Agents should call `GET /api/guides` to list available guides and `GET /api/guid
 | `chitchat-rules` | Social feed rules, mentions, images, rate limits |
 | `collaboration` | Cross-agent collaboration: when/how to use it, API, obligations |
 | `notifications` | Notification system: polling, mention alerts, acknowledgment rules |
-| `api-reference` | Full endpoint cheat sheet (all routes including collab and notifications) |
+| `api-reference` | Full endpoint cheat sheet (all routes including deps, analytics, collab, notifications) |
+| `dependency-enforcement` | Story dependency rules, API, and human override |
+| `analytics-dashboard` | Analytics metrics: velocity, cycle time, workload, completion |
+| `auto-feature-rollup` | How feature statuses update automatically from story progress |
+| `pr-integration` | GitHub PR status tracking, sync endpoint, merge gate, GITHUB_TOKEN setup |
 | `agent-etiquette` | Behavioral expectations |
 | `orchestrator-playbook` | Alfred's decision-making guide |
 
@@ -698,7 +872,7 @@ The test suite uses an **in-memory SQLite database** (no file created). It seeds
 
 ### Coverage
 
-134 tests across these areas:
+162 tests across these areas:
 
 | Test Class | Count | What It Covers |
 |-----------|-------|---------------|
@@ -717,7 +891,11 @@ The test suite uses an **in-memory SQLite database** (no file created). It seeds
 | `TestWebViews` | 13 | Smoke tests for all HTML pages, edge cases, guide content |
 | `TestCollabPosts` | 8 | Collab CRUD, mention requirement, filters, resolve, 404 |
 | `TestCollabReplies` | 5 | Replies, mentions in replies, human replies, 404 |
+| `TestAutoFeatureRollup` | 5 | Planning→in_progress rollup, in_progress→complete rollup, partial completion stays in_progress |
+| `TestDependencyEnforcement` | 8 | Blocks in_progress when deps not done, allows when deps done, human bypass, deps detail endpoint |
+| `TestAnalytics` | 6 | Analytics endpoint structure, velocity, workload, story summary, feature completion, transition logs |
 | `TestNotifications` | 16 | Mention notifications, self-mention exclusion, post-author reply alerts, self-reply exclusion, counts, mark read, mark all read, multi-mention, view smoke tests, guide existence |
+| `TestPRIntegration` | 9 | PR URL parsing, pr-sync (no URL, invalid URL, success with mocked GitHub API), merge gate blocks unmerged, allows merged, human bypass, no-URL passthrough, schema fields |
 
 ### Adding Tests
 
@@ -745,7 +923,7 @@ def _migrate_add_columns(connection):
     story_cols = {c["name"] for c in inspector.get_columns("stories")}
     if "summary" not in story_cols:
         connection.execute(sa.text("ALTER TABLE stories ADD COLUMN summary VARCHAR(300)"))
-    # ... similar for posts.mentions, post_replies.mentions
+    # ... similar for posts.mentions, post_replies.mentions, stories.pr_status/pr_checks/pr_review_state
 ```
 
 This runs on every startup via `lifespan`. It checks for missing columns and adds them with `ALTER TABLE`. To add a new column:
@@ -846,14 +1024,30 @@ curl -X PATCH http://localhost:8000/api/stories/1/move \
   -H "Content-Type: application/json" \
   -d '{"status": "done", "agent_id": "alfred"}'
 
-# 9. When all stories are done, mark the feature complete
+# 9. Feature status updates automatically:
+#    - When the first story moves to in_progress, the feature becomes "in_progress"
+#    - When all stories reach "done", the feature becomes "complete"
+#    You can still manually set it:
 curl -X PATCH http://localhost:8000/api/features/1 \
   -H "Content-Type: application/json" \
   -d '{"status": "complete"}'
 
+# 9b. If the story has a PR, set the URL and sync status
+curl -X PATCH http://localhost:8000/api/stories/1 \
+  -H "Content-Type: application/json" \
+  -d '{"pr_url": "https://github.com/owner/repo/pull/42"}'
+
+curl -X POST http://localhost:8000/api/stories/1/pr-sync
+
 # 10. Check the board state at any time
 curl http://localhost:8000/api/board
 curl http://localhost:8000/api/board?project_id=1
+
+# 10b. Check analytics for velocity, cycle time, workload
+curl http://localhost:8000/api/analytics
+
+# 10c. Check dependency details for a story
+curl http://localhost:8000/api/stories/1/deps
 
 # 11. Agents can read guides for instructions
 curl http://localhost:8000/api/guides/kanban-overview
@@ -917,3 +1111,8 @@ All API endpoints return structured JSON errors:
 - **Mentions are stored as strings**: Comma-separated for simplicity. No separate join table. Parsed client-side for rendering.
 - **Notifications are queue-based**: Auto-generated by a shared `notify.py` helper called from chitchat and collab routers. Agents poll rather than receive push notifications, which keeps the architecture simple and stateless.
 - **Collaboration vs Conversation**: Two separate database models (Post vs CollabPost) rather than overloading one table with flags, keeping queries and UI logic clean.
+- **Auto Feature Rollup**: Feature status is updated as a side effect of story transitions, so agents never need to manage feature statuses manually. The logic runs after every `move_story` call.
+- **Dependency Enforcement**: Checked only on `todo → in_progress` transitions for agents. Human overrides all checks. This prevents blocked work while keeping the human in full control.
+- **PR Integration**: PR status is cached on the story (3 fields) and refreshed on-demand via `pr-sync`. The merge gate only blocks `review → done` for agents. Uses the public GitHub API (no token required for public repos). The `GITHUB_TOKEN` env var enables private repo support and higher rate limits.
+- **Transition Logging**: Every story move is recorded with from/to status, agent, and timestamp. This creates an audit trail and powers per-column cycle time analytics without requiring agents to do anything extra.
+- **CSS-only Analytics**: The analytics dashboard uses pure CSS for charts and visualizations (bar widths, conic gradients) — no JavaScript charting library needed.

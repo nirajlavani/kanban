@@ -198,15 +198,68 @@ async function openStoryModal(storyId) {
             <div class="flex justify-end mb-6">
                 <button onclick="saveStoryEdits(${story.id})" class="px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-btn hover:brightness-110 transition-smooth font-body">Save Changes</button>
             </div>
-            ${story.pr_url ? `<div class="mb-5"><h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Pull Request</h3><a href="${story.pr_url}" target="_blank" rel="noopener noreferrer" class="text-[13px] font-body text-brand hover:underline">${story.pr_url}</a></div>` : ''}
-            ${story.dependencies ? `<div class="mb-5"><h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Dependencies</h3><div class="rounded-card p-4 text-[13px] font-body" style="background:#1e1e1e; color:#9a9a9a">${story.dependencies}</div></div>` : ''}
+            ${story.pr_url ? `<div class="mb-5">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-heading text-[14px]" style="color:#5a5a5a">Pull Request</h3>
+                    <button onclick="syncPR(${story.id})" class="text-[11px] px-2 py-1 rounded-btn font-body font-medium hover:brightness-125 transition-smooth" style="background:#1e1e1e; color:#9a9a9a;" title="Refresh PR status">&#8635; Sync</button>
+                </div>
+                <a href="${story.pr_url}" target="_blank" rel="noopener noreferrer" class="text-[13px] font-body text-brand hover:underline block mb-2">${story.pr_url}</a>
+                <div class="flex items-center gap-2 flex-wrap" id="pr-badges-${story.id}">
+                    ${(() => {
+                        const statusColors = {merged:'background:#065f46;color:#5cc8a8', open:'background:#312e81;color:#a78bfa', closed:'background:#1f2937;color:#6b7280'};
+                        const checkColors = {passing:'background:#065f46;color:#5cc8a8', failing:'background:#7f1d1d;color:#fca5a5', pending:'background:#78350f;color:#fcd34d'};
+                        const reviewColors = {approved:'background:#065f46;color:#5cc8a8', changes_requested:'background:#78350f;color:#fcd34d', pending:'background:#1f2937;color:#6b7280'};
+                        const reviewLabels = {approved:'Approved', changes_requested:'Changes Requested', pending:'Pending Review'};
+                        let badges = '';
+                        if (story.pr_status) badges += '<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold font-body" style="' + (statusColors[story.pr_status]||statusColors.closed) + '">' + story.pr_status.charAt(0).toUpperCase() + story.pr_status.slice(1) + '</span>';
+                        if (story.pr_checks) badges += '<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold font-body" style="' + (checkColors[story.pr_checks]||checkColors.pending) + '">CI: ' + story.pr_checks.charAt(0).toUpperCase() + story.pr_checks.slice(1) + '</span>';
+                        if (story.pr_review_state) badges += '<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold font-body" style="' + (reviewColors[story.pr_review_state]||reviewColors.pending) + '">' + (reviewLabels[story.pr_review_state]||story.pr_review_state) + '</span>';
+                        return badges || '<span class="text-[10px] font-body" style="color:#5a5a5a">Not synced yet — click Sync to fetch status</span>';
+                    })()}
+                </div>
+            </div>` : ''}
+            ${story.dependencies ? `<div class="mb-5" id="deps-section"><h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Dependencies</h3><div class="rounded-card p-4 text-[13px] font-body space-y-2" style="background:#1e1e1e; color:#9a9a9a" id="deps-list">Loading...</div></div>` : ''}
             <div class="mt-6 border-t pt-6" style="border-color:#1e1e1e">
                 <h3 class="font-heading text-[14px] mb-4" style="color:#5a5a5a">Comments (${(story.comments||[]).length})</h3>
                 <div class="space-y-3">${comments || '<p class="text-[13px] font-body" style="color:#5a5a5a">No comments yet.</p>'}</div>
             </div>
         `;
+        if (story.dependencies) {
+            loadDeps(storyId);
+        }
     } catch (err) {
         content.innerHTML = '<p class="text-center py-10 font-body" style="color:#e07a5f;">Failed to load story details.</p>';
+    }
+}
+
+async function loadDeps(storyId) {
+    const depsList = document.getElementById('deps-list');
+    if (!depsList) return;
+    try {
+        const res = await fetch(`/api/stories/${storyId}/deps`);
+        const deps = await res.json();
+        if (!deps.length) { depsList.innerHTML = '<span class="text-txt-muted">No valid dependencies.</span>'; return; }
+        const dotColor = s => s === 'done' ? '#5cc8b4' : s === 'in_progress' ? '#818cf8' : s === 'testing' ? '#f0d878' : s === 'review' ? '#d4ccf8' : '#b0b0b0';
+        depsList.innerHTML = deps.map(d =>
+            `<div class="flex items-center gap-2 cursor-pointer hover:brightness-125 transition-smooth" onclick="closeStoryModal();setTimeout(()=>openStoryModal(${d.id}),200)">
+                <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${dotColor(d.status)}; box-shadow:0 0 6px ${dotColor(d.status)}40;"></span>
+                <span class="font-body text-[13px]" style="color:#f5f5f5;">#${d.id}</span>
+                <span class="font-body text-[13px] truncate" style="color:#9a9a9a;">${d.title}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold font-body ml-auto shrink-0" style="${d.status === 'done' ? 'background:rgba(92,200,168,0.25);color:#a0f0d8' : d.status === 'in_progress' ? 'background:rgba(99,102,241,0.25);color:#c5c8ff' : 'background:rgba(0,0,0,0.3);color:#c0c0c0'}">${d.status.replace('_',' ')}</span>
+            </div>`
+        ).join('');
+    } catch { depsList.innerHTML = '<span class="text-txt-muted">Failed to load deps.</span>'; }
+}
+
+async function syncPR(storyId) {
+    const badgesEl = document.getElementById(`pr-badges-${storyId}`);
+    if (badgesEl) badgesEl.innerHTML = '<span class="text-[10px] font-body" style="color:#9a9a9a">Syncing...</span>';
+    try {
+        const res = await fetch(`/api/stories/${storyId}/pr-sync`, {method:'POST'});
+        if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Sync failed'); }
+        openStoryModal(storyId);
+    } catch(err) {
+        if (badgesEl) badgesEl.innerHTML = `<span class="text-[10px] font-body" style="color:#fca5a5">${err.message}</span>`;
     }
 }
 

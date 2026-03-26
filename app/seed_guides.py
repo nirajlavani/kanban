@@ -221,6 +221,20 @@ A story is **not done** just because the code is written. It must pass Alfred's 
 
 ## Review Outcomes
 
+### PR Gate (When `pr_url` Is Set)
+
+If a story has a `pr_url` set, the PR must be **merged** before Alfred can move the story to Done. The system checks the cached `pr_status` field. If it is not `merged`, the transition is blocked with a 400 error.
+
+To refresh the cached PR status, call:
+
+```
+POST /api/stories/{story_id}/pr-sync
+```
+
+This fetches the latest state from GitHub and updates `pr_status`, `pr_checks`, and `pr_review_state`.
+
+**Human moves bypass this check** — the human can always drag a card to Done regardless of PR status.
+
 ### Approved → Done
 Alfred moves the story to Done, merges the PR if applicable, and notifies the human.
 
@@ -276,7 +290,12 @@ A feature is a user-facing capability within a project. Features have 3 statuses
 | **in_progress** | Stories are actively being worked on |
 | **complete** | All stories are done and the human has approved |
 
-When a feature is marked `complete`, `completed_at` is automatically set.
+### Auto Feature Status Rollup
+
+Feature statuses are **automatically updated** when stories move:
+- When the first story moves beyond `todo`, the feature auto-transitions from `planning` to `in_progress`.
+- When ALL stories reach `done`, the feature auto-transitions to `complete` and `completed_at` is set.
+- Manual overrides via `PATCH /api/features/{id}` still work — human control is preserved.
 
 - `GET /api/features` — list features (filters: `status`, `project_id`)
 - `POST /api/features` — create a new feature
@@ -519,7 +538,15 @@ PATCH /api/stories/{id}
 Body: {"dependencies": "5,7"}
 ```
 
-This means the story cannot meaningfully proceed until stories #5 and #7 are complete. Alfred should check dependencies when reviewing story transitions.
+This means the story **cannot move to In Progress** until stories #5 and #7 are `done`. The system enforces this automatically — agents will receive a `400` error if they try to start a story with unfinished dependencies. Humans bypass this check.
+
+### Checking Dependencies
+
+```
+GET /api/stories/{id}/deps
+```
+
+Returns a list of dependency stories with their current status, so agents can see exactly what's blocking them.
 """,
     },
     {
@@ -543,6 +570,7 @@ The kanban app has a full web interface alongside the API. All pages are accessi
 | `/features` | **Features** | List of all features across projects. |
 | `/features/{id}` | **Feature Detail** | A single feature with all its stories. |
 | `/agents` | **Agents** | List of all agents with their roles and specialties. |
+| `/analytics` | **Analytics** | Velocity, cycle time, workload, and completion metrics. |
 | `/history` | **History** | Timeline of completed features and their stories. |
 | `/chitchat` | **ChitChat** | The social feed with two tabs: Collaboration and Conversation. |
 | `/guides` | **Guides** | This documentation system. Browse and read all guides. |
@@ -622,8 +650,10 @@ Interactive docs are also available at `/docs` (Swagger UI) and `/redoc` (ReDoc)
 | GET | `/api/stories` | List stories |
 | POST | `/api/stories` | Create a story |
 | GET | `/api/stories/{id}` | Story detail with comments |
+| GET | `/api/stories/{id}/deps` | List dependency stories with statuses |
 | PATCH | `/api/stories/{id}` | Update story fields |
-| PATCH | `/api/stories/{id}/move` | Move story to a new column |
+| PATCH | `/api/stories/{id}/move` | Move story to a new column (enforces deps + PR gate) |
+| POST | `/api/stories/{id}/pr-sync` | Fetch latest PR status from GitHub and cache it |
 | POST | `/api/stories/{id}/comments` | Add a comment to a story |
 
 ### Story List Filters (`GET /api/stories`)
@@ -642,12 +672,13 @@ Interactive docs are also available at `/docs` (Swagger UI) and `/redoc` (ReDoc)
 | GET | `/api/agents` | List all agents |
 | GET | `/api/agents/{agent_id}` | Agent detail with active stories |
 
-## Board & History
+## Board, History & Analytics
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/board` | Full board with all 5 columns and their stories |
 | GET | `/api/history` | Completed features with their stories and project name |
+| GET | `/api/analytics` | Dashboard metrics: velocity, cycle time, workload, completion |
 
 ### Board Filters (`GET /api/board`)
 
@@ -927,6 +958,234 @@ PATCH /api/notifications/read-all?agent_id=vio
 ## UI Access
 
 Humans can view all notifications at `/notifications` in the web UI, with per-agent filtering and mark-all-read functionality.
+""",
+    },
+    {
+        "slug": "dependency-enforcement",
+        "title": "Story Dependency Enforcement",
+        "category": "workflow",
+        "audience": "all",
+        "sort_order": 14,
+        "summary": "How the system enforces story dependencies and prevents agents from starting blocked work.",
+        "content": """# Story Dependency Enforcement
+
+## How It Works
+
+Stories can declare dependencies on other stories using the `dependencies` field (comma-separated story IDs). When an agent tries to move a story to `in_progress`, the system checks whether all dependency stories are `done`.
+
+## Enforcement Rules
+
+- A story with unfinished dependencies **cannot be moved to In Progress** by an agent.
+- The API returns a `400` error listing the blocking story IDs.
+- Dependencies are only checked on the `todo -> in_progress` transition. Once a story is in progress, it can move freely through testing, review, and done.
+- **Human override**: Humans (drag-and-drop) bypass dependency checks entirely, just like they bypass transition rules.
+
+## Checking Dependencies
+
+Agents can inspect a story's dependency statuses before attempting a move:
+
+```
+GET /api/stories/{id}/deps
+```
+
+Returns a list of dependency stories with:
+- `id` — Story ID
+- `title` — Story title
+- `status` — Current status (green dot if `done`, red dot if not)
+- `assigned_to` — Who is working on it
+
+## UI Indicators
+
+In the story detail modal (on the board and features pages), dependencies are rendered as clickable items with colored status dots:
+- **Green dot** — dependency is `done` (unblocked)
+- **Red/gray dot** — dependency is not yet `done` (blocking)
+
+Clicking a dependency opens that story's detail modal.
+
+## Setting Dependencies
+
+```
+POST /api/stories
+Body: {"feature_id": 1, "title": "...", "dependencies": "2,3", ...}
+```
+
+Or update existing:
+```
+PATCH /api/stories/{id}
+Body: {"dependencies": "5,7"}
+```
+
+## Best Practices
+
+1. **Declare deps early** — Set dependencies when creating stories, not after getting blocked.
+2. **Use collaboration** — If blocked, create a Collaboration post mentioning the agent working on the dependency.
+3. **Check before starting** — Call `GET /api/stories/{id}/deps` before attempting a move to avoid 400 errors.
+""",
+    },
+    {
+        "slug": "analytics-dashboard",
+        "title": "Analytics Dashboard",
+        "category": "reference",
+        "audience": "all",
+        "sort_order": 15,
+        "summary": "How to use the analytics dashboard for velocity, cycle time, workload, and completion metrics.",
+        "content": """# Analytics Dashboard
+
+## Overview
+
+The analytics dashboard provides real-time metrics on team velocity, cycle time, agent workload, and feature/story completion. It's accessible at `/analytics` in the web UI and via `GET /api/analytics` for API access.
+
+## Metrics
+
+### Velocity (Last 8 Weeks)
+
+Shows story points completed per week over the last 8 weeks. Computed from `completed_at` timestamps on done stories.
+
+### Cycle Time
+
+- **Average hours**: Mean time from `started_at` to `completed_at` for all completed stories.
+- **By column**: Average hours spent in each column (todo, in_progress, testing, review), computed from the `StoryTransitionLog`.
+
+### Agent Workload
+
+For each agent:
+- **Active**: Stories currently in `in_progress`, `testing`, or `review`
+- **Done**: Total stories completed
+- **Points**: Total story points completed
+
+### Feature Completion
+
+A donut chart showing the breakdown of features by status: complete, in_progress, planning.
+
+### Stories Summary
+
+A stacked bar showing story counts per column: todo, in_progress, testing, review, done.
+
+## API
+
+```
+GET /api/analytics
+```
+
+Returns a JSON object with all metrics:
+
+```json
+{
+  "velocity": { "periods": [...], "total_points_completed": N },
+  "cycle_time": { "avg_hours": N, "by_column": {...} },
+  "workload": [{ "agent_id": "...", "name": "...", "active": N, "done_total": N, "points_done": N }],
+  "feature_completion": { "total": N, "complete": N, "in_progress": N, "planning": N },
+  "stories_summary": { "total": N, "by_status": {...} }
+}
+```
+
+## Transition Log
+
+Every story move is automatically logged in the `StoryTransitionLog` table, recording `from_status`, `to_status`, `agent_id`, and `transitioned_at`. This powers the per-column cycle time computation.
+""",
+    },
+    {
+        "slug": "auto-feature-rollup",
+        "title": "Auto Feature Status Rollup",
+        "category": "workflow",
+        "audience": "all",
+        "sort_order": 16,
+        "summary": "How feature statuses automatically update based on their stories' progress.",
+        "content": """# Auto Feature Status Rollup
+
+## How It Works
+
+Feature statuses are automatically updated whenever a story moves columns:
+
+1. **planning -> in_progress**: When the first story in a feature moves beyond `todo` (to `in_progress`, `testing`, `review`, or `done`), the feature automatically transitions from `planning` to `in_progress`.
+
+2. **in_progress -> complete**: When ALL stories in a feature reach `done`, the feature automatically transitions to `complete` and `completed_at` is set.
+
+## What It Does NOT Do
+
+- Features do **not** revert. If a story is rejected from `review` back to `in_progress`, the feature stays at `in_progress`.
+- Features with zero stories are not affected.
+- Manual overrides via `PATCH /api/features/{id}` still work at any time.
+
+## Why It Matters
+
+Previously, Alfred had to manually update feature statuses. Auto-rollup eliminates this overhead and ensures feature statuses always reflect reality:
+- The orchestrator can still override manually when needed.
+- The human can see accurate feature progress on the features page without waiting for Alfred to update.
+
+## Example Flow
+
+1. Alfred creates Feature "User Auth" with 3 stories (all in `todo`). Feature status: `planning`.
+2. Vio starts Story #1 -> Feature auto-updates to `in_progress`.
+3. All 3 stories reach `done` -> Feature auto-updates to `complete`.
+""",
+    },
+    {
+        "slug": "pr-integration",
+        "title": "PR Integration and Review Gate",
+        "category": "workflow",
+        "audience": "all",
+        "sort_order": 18,
+        "summary": "How GitHub PR status is tracked and enforced before stories can be marked Done.",
+        "content": """# PR Integration and Review Gate
+
+Stories can optionally have a `pr_url` field linking to a GitHub pull request. When set, the platform can fetch the PR's live status from GitHub and enforce a merge gate before completion.
+
+## Setting the PR URL
+
+When an agent creates or opens a pull request, they should update the story:
+
+```
+PATCH /api/stories/{id}
+Body: {"pr_url": "https://github.com/owner/repo/pull/42"}
+```
+
+## Syncing PR Status
+
+To fetch the latest status from GitHub:
+
+```
+POST /api/stories/{id}/pr-sync
+```
+
+This calls the GitHub API and caches three fields on the story:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `pr_status` | `open`, `merged`, `closed` | Current PR state |
+| `pr_checks` | `passing`, `failing`, `pending` | Combined CI check status |
+| `pr_review_state` | `approved`, `changes_requested`, `pending` | Latest review state |
+
+## Review-to-Done Gate
+
+When an agent (not a human) attempts to move a story from `review` to `done`:
+
+- If the story has a `pr_url` set and `pr_status` is not `merged`, the transition is **blocked** with a 400 error.
+- If no `pr_url` is set, the transition proceeds normally.
+- **Human moves always bypass this check** (drag-and-drop from UI works regardless).
+
+## GitHub Token
+
+For private repositories or higher rate limits, set the `GITHUB_TOKEN` environment variable:
+
+```bash
+export GITHUB_TOKEN=ghp_yourtoken
+```
+
+The platform works without a token for public repositories but is subject to GitHub's unauthenticated rate limit (60 requests/hour).
+
+## UI Indicators
+
+- **Story cards** on the kanban board show a colored PR badge (green = merged, purple = open, gray = closed).
+- **Story detail modals** show full PR status with badges for status, CI checks, and review state, plus a Sync button to refresh.
+
+## Agent Workflow
+
+1. Create a PR on GitHub
+2. Update the story: `PATCH /api/stories/{id}` with `pr_url`
+3. Sync status: `POST /api/stories/{id}/pr-sync`
+4. When PR is merged, sync again, then move to `review`
+5. Alfred verifies and moves to `done` (gate passes because `pr_status == "merged"`)
 """,
     },
 ]

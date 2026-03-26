@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import TEMPLATES_DIR
 from app.database import get_db
-from app.models import Agent, CollabPost, Comment, Feature, Guide, Notification, Post, PostReply, Project, Story
+from app.models import Agent, CollabPost, Comment, Feature, Guide, Notification, Post, PostReply, Project, Story, StoryTransitionLog
 
 router = APIRouter(tags=["views"])
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -245,6 +245,16 @@ async def feature_detail_view(
         "project_name": feature.project.name if feature.project else "—",
         "stories": stories_data,
         "active": "features",
+    })
+
+
+@router.get("/analytics")
+async def analytics_view(request: Request, db: AsyncSession = Depends(get_db)):
+    from app.routers.analytics import get_analytics
+    data = await get_analytics(db)
+    return templates.TemplateResponse(request, "analytics.html", {
+        "analytics": data.model_dump(),
+        "active": "analytics",
     })
 
 

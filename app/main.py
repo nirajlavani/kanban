@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import STATIC_DIR
 from app.database import Base, async_session, engine
-from app.routers import agents, board, chitchat, collab, features, guides, notifications, projects, stories, views
+from app.routers import agents, analytics, board, chitchat, collab, features, guides, notifications, projects, stories, views
 from app.seed import seed_agents
 from app.seed_guides import seed_guides
 
@@ -28,6 +28,10 @@ def _migrate_add_columns(connection):
         reply_cols = {c["name"] for c in inspector.get_columns("post_replies")}
         if "mentions" not in reply_cols:
             connection.execute(sa.text("ALTER TABLE post_replies ADD COLUMN mentions VARCHAR(500)"))
+
+    for col in ("pr_status", "pr_checks", "pr_review_state"):
+        if col not in story_cols:
+            connection.execute(sa.text(f"ALTER TABLE stories ADD COLUMN {col} VARCHAR(20)"))
 
 
 def _ensure_chitchat_images_dir():
@@ -62,6 +66,7 @@ app.include_router(features.router)
 app.include_router(stories.router)
 app.include_router(agents.router)
 app.include_router(board.router)
+app.include_router(analytics.router)
 app.include_router(chitchat.router)
 app.include_router(collab.router)
 app.include_router(notifications.router)

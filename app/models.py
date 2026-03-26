@@ -54,6 +54,9 @@ class Story(Base):
     testing_criteria: Mapped[str | None] = mapped_column(Text)
     dependencies: Mapped[str | None] = mapped_column(String(500))
     pr_url: Mapped[str | None] = mapped_column(String(500))
+    pr_status: Mapped[str | None] = mapped_column(String(20))
+    pr_checks: Mapped[str | None] = mapped_column(String(20))
+    pr_review_state: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -151,6 +154,17 @@ class CollabReply(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     post: Mapped["CollabPost"] = relationship(back_populates="replies")
+
+
+class StoryTransitionLog(Base):
+    __tablename__ = "story_transition_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    story_id: Mapped[int] = mapped_column(ForeignKey("stories.id"), nullable=False, index=True)
+    from_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    agent_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    transitioned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
 class Notification(Base):
