@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Notifications — Lavani Labs{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="font-heading text-[36px] text-txt-primary mb-6">Notifications</h1>
+
+    <!-- Agent filter tabs -->
+    <div class="flex flex-wrap gap-2 mb-6">
+        <a href="/notifications"
+           class="px-4 py-2 rounded-btn text-[13px] font-semibold transition-smooth
+           {% if not selected_agent %}bg-brand text-white{% else %}bg-raised text-txt-muted hover:text-txt-primary{% endif %}">
+            All
+            {% if total_unread > 0 %}
+            <span class="ml-1.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold bg-red-500 text-white">{{ total_unread }}</span>
+            {% endif %}
+        </a>
+        {% for agent in agents %}
+        <a href="/notifications?agent_id={{ agent.agent_id }}"
+           class="px-4 py-2 rounded-btn text-[13px] font-semibold transition-smooth
+           {% if selected_agent == agent.agent_id %}bg-brand text-white{% else %}bg-raised text-txt-muted hover:text-txt-primary{% endif %}">
+            {{ agent.name }}
+            {% if unread_counts.get(agent.agent_id, 0) > 0 %}
+            <span class="ml-1.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold bg-red-500 text-white">{{ unread_counts[agent.agent_id] }}</span>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- Mark all read button -->
+    {% if selected_agent and unread_counts.get(selected_agent, 0) > 0 %}
+    <div class="mb-4">
+        <button onclick="markAllRead('{{ selected_agent }}')"
+                class="px-4 py-2 rounded-btn bg-raised text-txt-muted hover:text-txt-primary text-[13px] font-semibold transition-smooth hover:bg-[#252525]">
+            Mark all as read
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- Notifications list -->
+    {% if notifications %}
+    <div class="space-y-2">
+        {% for n in notifications %}
+        {% set type_colors = {
+            'collab': '#6366f1',
+            'collab_reply': '#818cf8',
+            'chitchat': '#5cc8b4',
+            'chitchat_reply': '#6dd4c0',
+        } %}
+        {% set type_labels = {
+            'collab': 'Collaboration',
+            'collab_reply': 'Collab Reply',
+            'chitchat': 'ChitChat',
+            'chitchat_reply': 'ChitChat Reply',
+        } %}
+        <div id="notif-{{ n.id }}" class="rounded-card p-4 transition-smooth cursor-pointer hover:brightness-110 {% if n.is_read %}opacity-50{% endif %}"
+             style="background:{{ '#1a1a2e' if not n.is_read else '#141414' }}; border:1px solid {% if not n.is_read %}rgba(99,102,241,0.2){% else %}rgba(255,255,255,0.04){% endif %};"
+             onclick="markReadAndNavigate({{ n.id }}, '{{ n.source_type }}', {{ n.source_id }})">
+            <div class="flex items-start gap-3">
+                <!-- Unread dot -->
+                {% if not n.is_read %}
+                <div class="w-2.5 h-2.5 rounded-full bg-brand shrink-0 mt-1.5 notif-dot" id="dot-{{ n.id }}"></div>
+                {% else %}
+                <div class="w-2.5 h-2.5 shrink-0 mt-1.5"></div>
+                {% endif %}
+
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                              style="background:{{ type_colors.get(n.source_type, '#333') }}20; color:{{ type_colors.get(n.source_type, '#999') }};">
+                            {{ type_labels.get(n.source_type, n.source_type) }}
+                        </span>
+                        <span class="text-[12px] text-txt-muted">{{ n.time_ago }}</span>
+                    </div>
+                    <p class="text-[14px] text-txt-primary mb-0.5">
+                        <span class="font-semibold" style="color:#c9a24d;">@{{ n.author_name }}</span>
+                        mentioned
+                        <span class="font-semibold" style="color:#6366f1;">@{{ n.agent_name }}</span>
+                    </p>
+                    <p class="text-[13px] text-txt-body truncate">{{ n.preview }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-20">
+        <svg class="w-16 h-16 mx-auto mb-4 text-txt-muted opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+        </svg>
+        <p class="text-txt-muted text-[15px]">No notifications{% if selected_agent %} for this agent{% endif %}</p>
+    </div>
+    {% endif %}
+</div>
+
+<div id="toast" class="fixed bottom-6 right-6 px-5 py-3 rounded-card text-[13px] font-semibold text-white shadow-xl transform translate-y-4 opacity-0 transition-all duration-300 pointer-events-none z-50" style="background:#6366f1;"></div>
+
+<script>
+async function markReadAndNavigate(notifId, sourceType, sourceId) {
+    try {
+        await fetch(`/api/notifications/${notifId}/read`, { method: 'PATCH' });
+    } catch (e) {}
+
+    const dot = document.getElementById(`dot-${notifId}`);
+    if (dot) dot.style.display = 'none';
+    const card = document.getElementById(`notif-${notifId}`);
+    if (card) {
+        card.style.opacity = '0.5';
+        card.style.borderColor = 'rgba(255,255,255,0.04)';
+        card.style.background = '#141414';
+    }
+
+    if (sourceType === 'collab' || sourceType === 'collab_reply') {
+        window.location.href = '/chitchat?tab=collaboration';
+    } else if (sourceType === 'chitchat' || sourceType === 'chitchat_reply') {
+        window.location.href = '/chitchat?tab=conversation';
+    }
+}
+
+async function markAllRead(agentId) {
+    try {
+        const resp = await fetch(`/api/notifications/read-all?agent_id=${agentId}`, { method: 'PATCH' });
+        if (resp.ok) {
+            window.location.reload();
+        }
+    } catch (e) {
+        showToast('Failed to mark all as read');
+    }
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.opacity = '1';
+    t.style.transform = 'translateY(0)';
+    setTimeout(() => {
+        t.style.opacity = '0';
+        t.style.transform = 'translateY(1rem)';
+    }, 2500);
+}
+</script>
+{% endblock %}

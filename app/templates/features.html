@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Features — Lavani Labs{% endblock %}
+
+{% set status_badge = {
+    'planning':    'background:rgba(0,0,0,0.3); color:#b0b0b0',
+    'in_progress': 'background:rgba(99,102,241,0.25); color:#c5c8ff',
+    'complete':    'background:rgba(92,200,168,0.25); color:#a0f0d8'
+} %}
+{% set story_status_dot = {
+    'todo': '#b0b0b0', 'in_progress': '#818cf8', 'testing': '#f0d878', 'review': '#d4ccf8', 'done': '#a0f0d8'
+} %}
+{% set story_status_badge = {
+    'todo':        'background:rgba(0,0,0,0.3); color:#c0c0c0',
+    'in_progress': 'background:rgba(99,102,241,0.25); color:#c5c8ff',
+    'testing':     'background:rgba(224,184,80,0.25); color:#f0d878',
+    'review':      'background:rgba(155,140,224,0.25); color:#d4ccf8',
+    'done':        'background:rgba(92,200,168,0.25); color:#a0f0d8'
+} %}
+{% set agent_badge = {
+    'vio': 'background:rgba(155,140,224,0.3); color:#d4ccf8',
+    'neo': 'background:rgba(92,200,168,0.3); color:#b8ead8',
+    'zeo': 'background:rgba(104,184,224,0.3); color:#b8ddf0',
+    'alfred': 'background:rgba(224,184,80,0.3); color:#f5e8c0',
+    'seo': 'background:rgba(232,133,106,0.3); color:#f5ccc0'
+} %}
+
+{% block content %}
+<h1 class="font-heading text-[26px] text-txt-primary mb-8">Features</h1>
+
+{% if not features %}
+<div class="text-center py-20">
+    <p class="font-heading text-[20px] text-txt-muted mb-2">No features yet</p>
+    <p class="text-[13px] text-txt-muted font-body">Create one via the API: <code class="px-2 py-1 rounded-btn text-brand font-mono" style="background:#1e1e1e;">POST /api/features</code></p>
+</div>
+{% else %}
+<div class="space-y-6">
+    {% for feature in features %}
+    {% set progress_pct = ((feature.done_count / feature.story_count * 100) | int) if feature.story_count > 0 else 0 %}
+    <div class="rounded-card card-shadow overflow-hidden" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <div class="px-6 py-5" style="border-bottom:1px solid rgba(255,255,255,0.03);">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-3">
+                    <a href="/features/{{ feature.id }}" class="font-heading text-[20px] text-txt-primary hover:text-brand transition-smooth">{{ feature.title }}</a>
+                    <span class="text-[11px] px-2.5 py-1 rounded-full font-semibold font-body" style="{{ status_badge.get(feature.status, '') }}">
+                        {{ feature.status | replace('_', ' ') }}
+                    </span>
+                </div>
+                <span class="text-[11px] px-3 py-1 rounded-btn font-medium font-body" style="background:#1e1e1e; color:#9a9a9a;">{{ feature.project_name }}</span>
+            </div>
+            {% if feature.description %}
+            <p class="text-[13px] text-txt-muted mt-1">{{ feature.description }}</p>
+            {% endif %}
+            <div class="flex items-center gap-3 mt-4">
+                <div class="flex-1 h-2 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.04);">
+                    <div class="h-full rounded-full transition-all" style="width:{{ progress_pct }}%; background:{% if feature.status == 'complete' %}#5cc8b4{% else %}#6366f1{% endif %};"></div>
+                </div>
+                <span class="text-[12px] font-mono font-semibold text-txt-muted shrink-0">{{ feature.done_count }}/{{ feature.story_count }}</span>
+            </div>
+        </div>
+
+        {% if feature.stories %}
+        <div>
+            {% for story in feature.stories %}
+            {% set agent_color = {
+                'vio': '#d4ccf8', 'neo': '#b8ead8', 'zeo': '#b8ddf0', 'alfred': '#f5e8c0', 'seo': '#f5ccc0'
+            } %}
+            <div class="flex items-center px-6 py-3.5 transition-smooth cursor-pointer hover:brightness-110"
+                 style="border-bottom:1px solid rgba(255,255,255,0.02); background:rgba(255,255,255,0.01);"
+                 onclick="openStoryModal({{ story.id }})">
+                <span class="w-2 h-2 rounded-full shrink-0 mr-3" style="background:{{ story_status_dot.get(story.status, '#5a5a5a') }};"></span>
+                <span class="text-[13px] text-txt-primary truncate font-body flex-1 min-w-0 mr-4">{{ story.title }}</span>
+                {% if story.assigned_to %}
+                <span class="text-[12px] font-body font-semibold shrink-0 mr-6" style="color:{{ agent_color.get(story.assigned_to, '#9a9a9a') }};">{{ story.assigned_to }}</span>
+                {% endif %}
+                <span class="text-[10px] px-2.5 py-0.5 rounded-full font-semibold font-body shrink-0 mr-5" style="{{ story_status_badge.get(story.status, '') }}">{{ story.status | replace('_', ' ') }}</span>
+                <span class="text-[11px] font-mono font-semibold shrink-0
+                    {% if story.points <= 2 %}text-[#8ae8d4]
+                    {% elif story.points <= 5 %}text-[#e8c46a]
+                    {% else %}text-[#e08a7a]{% endif %}">{{ story.points }}pt</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="px-6 py-5 text-[13px] text-txt-muted font-body">No stories in this feature yet.</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Story Detail Modal -->
+<div id="story-modal" class="fixed inset-0 z-[60] hidden items-center justify-center" style="display:none;">
+    <div class="absolute inset-0 backdrop-blur-md" style="background:rgba(0,0,0,0.4);" onclick="closeStoryModal()"></div>
+    <div class="relative w-full max-w-2xl max-h-[85vh] rounded-card card-shadow-lg overflow-y-auto mx-4 animate-fade-in-up" style="background:#161616; border:1px solid #1e1e1e;">
+        <div class="p-8" id="story-modal-content"></div>
+    </div>
+</div>
+<div id="toast" class="fixed bottom-6 right-6 z-[70] hidden">
+    <div class="px-5 py-3 rounded-btn card-shadow text-sm font-semibold flex items-center gap-2 font-body"></div>
+</div>
+
+<script>
+const agentAvatars = {
+    alfred: '/static/avatars/alfred.png', vio: '/static/avatars/vio.png',
+    neo: '/static/avatars/neo.png', zeo: '/static/avatars/zeo.png',
+    seo: '/static/avatars/seo.png',
+};
+const agentFacePos = {
+    alfred: '50% 12%', vio: '50% 10%', neo: '50% 12%',
+    zeo: '50% 10%', seo: '50% 8%',
+};
+
+function agentAvatarHtml(agentId, size, accentColor) {
+    const av = agentAvatars[agentId];
+    const pos = agentFacePos[agentId] || '50% 30%';
+    if (av) {
+        return `<span class="rounded-full shrink-0 inline-block" style="width:${size}px;height:${size}px;background-image:url('${av}');background-size:250%;background-position:${pos};background-repeat:no-repeat;"></span>`;
+    }
+    const letter = agentId ? agentId[0].toUpperCase() : '?';
+    return `<span class="rounded-full shrink-0 inline-flex items-center justify-center text-white font-bold" style="width:${size}px;height:${size}px;background:${accentColor || '#5a5a5a'};font-size:${Math.round(size*0.4)}px;">${letter}</span>`;
+}
+
+async function openStoryModal(storyId) {
+    const modal = document.getElementById('story-modal');
+    const content = document.getElementById('story-modal-content');
+    content.innerHTML = '<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div></div>';
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    try {
+        const res = await fetch(`/api/stories/${storyId}`);
+        const story = await res.json();
+
+        const statusBadge = {
+            todo:        'background:rgba(0,0,0,0.3); color:#c0c0c0',
+            in_progress: 'background:rgba(99,102,241,0.25); color:#c5c8ff',
+            testing:     'background:rgba(224,184,80,0.25); color:#f0d878',
+            review:      'background:rgba(155,140,224,0.25); color:#d4ccf8',
+            done:        'background:rgba(92,200,168,0.25); color:#a0f0d8',
+        };
+        const agentColor = {
+            vio: '#d4ccf8', neo: '#b8ead8', zeo: '#b8ddf0',
+            alfred: '#f5e8c0', seo: '#f5ccc0',
+        };
+        const ac = agentColor[story.assigned_to] || '#9a9a9a';
+        const ptStyle = story.points <= 2 ? 'background:rgba(92,200,168,0.25);color:#a0f0d8' :
+                        story.points <= 5 ? 'background:rgba(224,184,80,0.25);color:#f0d878' : 'background:rgba(232,133,106,0.25);color:#f5ccc0';
+
+        const comments = (story.comments || []).map(c => {
+            const cac = agentColor[c.author] || '#9a9a9a';
+            const d = new Date(c.created_at);
+            const date = d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+', '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+            return `<div class="rounded-card p-4" style="background:#1e1e1e;">
+                <div class="flex items-center gap-2 mb-2">
+                    ${agentAvatarHtml(c.author, 20, cac)}
+                    <span class="text-[12px] font-bold font-body" style="color:${cac}">${c.author}</span>
+                    <span class="text-[10px]" style="color:#5a5a5a">${date}</span>
+                </div>
+                <p class="text-[13px] whitespace-pre-wrap font-body" style="color:#9a9a9a">${c.content}</p>
+            </div>`;
+        }).join('');
+
+        const editableField = (id, label, value, isTextarea) => {
+            const escaped = (value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            const tag = isTextarea
+                ? `<textarea id="edit-${id}" rows="4" class="w-full text-[13px] font-body rounded-card p-3 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;">${escaped}</textarea>`
+                : `<input id="edit-${id}" type="text" value="${escaped}" class="w-full text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;">`;
+            return `<div class="mb-5">
+                <h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">${label}</h3>
+                ${tag}
+            </div>`;
+        };
+
+        content.innerHTML = `
+            <div class="flex items-center justify-between mb-6">
+                <button onclick="closeStoryModal()" class="text-[13px] font-medium font-body hover:text-txt-primary transition-smooth" style="color:#5a5a5a">&larr; Back</button>
+                <span class="text-[11px] px-3 py-1 rounded-full font-semibold font-body" style="${statusBadge[story.status] || ''}">${story.status.replace('_',' ')}</span>
+            </div>
+            <h2 class="font-heading text-[26px] text-txt-primary mb-2">${story.title}</h2>
+            ${story.summary ? `<p class="text-[14px] font-body mb-4" style="color:${ac};">${story.summary}</p>` : ''}
+            <div class="flex items-center gap-3 mb-6">
+                <div class="flex items-center gap-2">
+                    ${agentAvatarHtml(story.assigned_to, 28, ac)}
+                    <span class="text-[13px] font-semibold font-body" style="color:${ac}">${story.assigned_to || 'Unassigned'}</span>
+                </div>
+                <span class="text-[13px] font-mono font-bold px-2.5 py-1 rounded-full" style="${ptStyle}">${story.points}pt</span>
+            </div>
+            ${editableField('description', 'Description', story.description, true)}
+            <div class="mb-5">
+                <h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Story Points</h3>
+                <select id="edit-points" class="text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;">
+                    ${[1,2,3,5,8].map(p => `<option value="${p}" ${story.points===p?'selected':''}>${p}pt</option>`).join('')}
+                </select>
+            </div>
+            ${editableField('acceptance_criteria', 'Acceptance Criteria', story.acceptance_criteria, true)}
+            ${editableField('testing_criteria', 'Testing Criteria', story.testing_criteria, true)}
+            <div class="flex justify-end mb-6">
+                <button onclick="saveStoryEdits(${story.id})" class="px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-btn hover:brightness-110 transition-smooth font-body">Save Changes</button>
+            </div>
+            ${story.pr_url ? `<div class="mb-5"><h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Pull Request</h3><a href="${story.pr_url}" target="_blank" rel="noopener noreferrer" class="text-[13px] font-body text-brand hover:underline">${story.pr_url}</a></div>` : ''}
+            ${story.dependencies ? `<div class="mb-5"><h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Dependencies</h3><div class="rounded-card p-4 text-[13px] font-body" style="background:#1e1e1e; color:#9a9a9a">${story.dependencies}</div></div>` : ''}
+            <div class="mt-6 border-t pt-6" style="border-color:#1e1e1e">
+                <h3 class="font-heading text-[14px] mb-4" style="color:#5a5a5a">Comments (${(story.comments||[]).length})</h3>
+                <div class="space-y-3">${comments || '<p class="text-[13px] font-body" style="color:#5a5a5a">No comments yet.</p>'}</div>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<p class="text-center py-10 font-body" style="color:#e07a5f;">Failed to load story details.</p>';
+    }
+}
+
+async function saveStoryEdits(storyId) {
+    const desc = document.getElementById('edit-description')?.value;
+    const points = parseInt(document.getElementById('edit-points')?.value);
+    const ac = document.getElementById('edit-acceptance_criteria')?.value;
+    const tc = document.getElementById('edit-testing_criteria')?.value;
+    const body = {};
+    if (desc !== undefined) body.description = desc;
+    if (!isNaN(points)) body.points = points;
+    if (ac !== undefined) body.acceptance_criteria = ac;
+    if (tc !== undefined) body.testing_criteria = tc;
+    try {
+        const res = await fetch(`/api/stories/${storyId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (res.ok) { showToast('Changes saved', 'success'); }
+        else { const err = await res.json(); showToast(err.detail || 'Save failed', 'error'); }
+    } catch { showToast('Network error', 'error'); }
+}
+
+function closeStoryModal() {
+    const modal = document.getElementById('story-modal');
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function showToast(msg, type) {
+    const toast = document.getElementById('toast');
+    const inner = toast.firstElementChild;
+    inner.textContent = msg;
+    inner.style.background = type === 'error' ? '#e07a5f' : '#5cc8b4';
+    inner.style.color = type === 'error' ? '#fff' : '#0d0d0d';
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 2500);
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeStoryModal(); });
+</script>
+{% endblock %}

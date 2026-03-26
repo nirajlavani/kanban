@@ -1,0 +1,83 @@
+{% set card_colors = {
+    'vio':    {'bg': '#3d3466', 'border': '#4e4580', 'accent': '#9b8ce0', 'text': '#d4ccf8'},
+    'neo':    {'bg': '#1e5c4a', 'border': '#2a7360', 'accent': '#5cc8a8', 'text': '#b8ead8'},
+    'zeo':    {'bg': '#1e4060', 'border': '#2a5580', 'accent': '#68b8e0', 'text': '#b8ddf0'},
+    'alfred': {'bg': '#8a6a28', 'border': '#a07830', 'accent': '#e0b850', 'text': '#f5e8c0'},
+    'seo':    {'bg': '#8c4a38', 'border': '#a05840', 'accent': '#e8856a', 'text': '#f5ccc0'}
+} %}
+{% set agent_avatars = {
+    'alfred': '/static/avatars/alfred.png',
+    'vio':    '/static/avatars/vio.png',
+    'neo':    '/static/avatars/neo.png',
+    'zeo':    '/static/avatars/zeo.png',
+    'seo':    '/static/avatars/seo.png'
+} %}
+{% set agent_face_pos = {
+    'alfred': '50% 12%',
+    'vio':    '50% 10%',
+    'neo':    '50% 12%',
+    'zeo':    '50% 10%',
+    'seo':    '50% 8%'
+} %}
+{% set c = card_colors.get(story.assigned_to, {'bg': '#3a3a3a', 'border': '#4a4a4a', 'accent': '#8a8a8a', 'text': '#c0c0c0'}) %}
+
+{% set status_steps = {'todo': 0, 'in_progress': 1, 'testing': 2, 'review': 3, 'done': 4} %}
+{% set progress = status_steps.get(story.status, 0) %}
+{% set progress_pct = (progress * 25) %}
+{% set comment_count = story.comments | length if story.comments is defined else 0 %}
+
+<div class="rounded-card p-4 card-shadow card-hover cursor-grab active:cursor-grabbing"
+     style="background:{{ c.bg }}; border:1px solid {{ c.border }};"
+     draggable="true"
+     data-story-id="{{ story.id }}"
+     data-glow-color="{{ c.accent }}"
+     onclick="openStoryModal({{ story.id }})"
+     ondragstart="handleDragStart(event)"
+     ondragend="handleDragEnd(event)">
+
+    <h3 class="text-[14px] font-semibold mb-1.5 leading-snug font-body" style="color:#ffffff;">{{ story.title }}</h3>
+
+    {% if story.summary %}
+    <p class="text-[12px] mb-2.5 leading-relaxed line-clamp-1" style="color:rgba(255,255,255,0.6);">{{ story.summary }}</p>
+    {% elif story.description %}
+    <p class="text-[12px] mb-2.5 leading-relaxed line-clamp-1" style="color:rgba(255,255,255,0.6);">{{ story.description }}</p>
+    {% endif %}
+
+    <div class="flex items-center gap-1.5 mb-3 flex-wrap">
+        {% if story.feature %}
+        <span class="text-[10px] px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,0,0,0.2); color:{{ c.text }};">{{ story.feature.project.name if story.feature.project else '' }}</span>
+        <span class="text-[10px] px-2 py-0.5 rounded-full font-medium" style="background:rgba(0,0,0,0.15); color:rgba(255,255,255,0.6);">{{ story.feature.title }}</span>
+        {% endif %}
+    </div>
+
+    <div class="mb-3">
+        <div class="w-full h-1 rounded-full overflow-hidden" style="background:rgba(0,0,0,0.2);">
+            <div class="h-full rounded-full transition-all" style="width:{{ progress_pct }}%; background:rgba(255,255,255,0.7);"></div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            {% if story.assigned_to %}
+            <span class="inline-flex items-center gap-1.5 text-[12px] font-semibold" style="color:#ffffff;">
+                {% set av = agent_avatars.get(story.assigned_to, '') %}
+                {% if av %}
+                <span class="w-6 h-6 rounded-full shrink-0" style="background-image:url('{{ av }}'); background-size:250%; background-position:{{ agent_face_pos.get(story.assigned_to, '50% 30%') }}; background-repeat:no-repeat; box-shadow:0 0 0 1.5px rgba(255,255,255,0.3);"></span>
+                {% else %}
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white uppercase" style="background:rgba(0,0,0,0.25);">{{ story.assigned_to[0] }}</span>
+                {% endif %}
+                {{ story.assigned_to }}
+            </span>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="flex items-center gap-1 text-[11px]" style="color:rgba(255,255,255,0.5);">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                {{ comment_count }}
+            </span>
+            <span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full" style="background:rgba(0,0,0,0.2); color:#ffffff;">
+                {{ story.points }}pt
+            </span>
+        </div>
+    </div>
+</div>

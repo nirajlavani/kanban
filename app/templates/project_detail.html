@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} — Lavani Labs{% endblock %}
+
+{% set status_badge_style = {
+    'planning':    'background:rgba(0,0,0,0.3); color:#b0b0b0',
+    'in_progress': 'background:rgba(99,102,241,0.25); color:#c5c8ff',
+    'complete':    'background:rgba(92,200,168,0.25); color:#a0f0d8'
+} %}
+
+{% block content %}
+<div class="mb-8">
+    <a href="/projects" class="text-[12px] text-brand hover:underline font-body">&larr; All Projects</a>
+    <h1 class="font-heading text-[26px] text-txt-primary mt-3">{{ project.name }}</h1>
+    {% if project.repo_path %}
+    <p class="text-[12px] font-mono mt-1" style="color:#5a5a5a;">{{ project.repo_path }}</p>
+    {% endif %}
+    {% if project.description %}
+    <p class="text-[13px] text-txt-body mt-2">{{ project.description }}</p>
+    {% endif %}
+</div>
+
+<h2 class="font-heading text-[20px] text-txt-primary mb-5">Features</h2>
+
+{% if not features %}
+<p class="text-[13px] font-body" style="color:#5a5a5a;">No features in this project yet.</p>
+{% else %}
+<div class="space-y-4">
+    {% for feature in features %}
+    {% set progress_pct = ((feature.done_count / feature.story_count * 100) | int) if feature.story_count > 0 else 0 %}
+    <a href="/features/{{ feature.id }}" class="block rounded-card p-5 card-shadow card-hover" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="font-body text-[15px] font-semibold text-txt-primary">{{ feature.title }}</h3>
+            <span class="text-[11px] px-2.5 py-1 rounded-full font-semibold font-body" style="{{ status_badge_style.get(feature.status, '') }}">
+                {{ feature.status | replace('_', ' ') }}
+            </span>
+        </div>
+        {% if feature.description %}
+        <p class="text-[13px] text-txt-body line-clamp-2 mb-3">{{ feature.description }}</p>
+        {% endif %}
+        <div class="flex items-center gap-3">
+            <div class="flex-1 h-1.5 rounded-full overflow-hidden" style="background:rgba(255,255,255,0.04);">
+                <div class="h-full rounded-full" style="width:{{ progress_pct }}%; background:{% if feature.status == 'complete' %}#5cc8b4{% else %}#6366f1{% endif %};"></div>
+            </div>
+            <span class="text-[12px] font-mono text-txt-muted shrink-0">{{ feature.done_count }}/{{ feature.story_count }}</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

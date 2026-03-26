@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Projects — Lavani Labs{% endblock %}
+
+{% block content %}
+<h1 class="font-heading text-[26px] text-txt-primary mb-8">Projects</h1>
+
+{% if not projects %}
+<div class="text-center py-20">
+    <p class="font-heading text-[20px] text-txt-muted mb-2">No projects yet</p>
+    <p class="text-[13px] text-txt-muted font-body">Create one via the API: <code class="px-2 py-1 rounded-btn text-brand font-mono" style="background:#1e1e1e;">POST /api/projects</code></p>
+</div>
+{% else %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for project in projects %}
+    <a href="/projects/{{ project.id }}" class="block rounded-card p-6 card-shadow card-hover" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <h2 class="font-heading text-[20px] text-txt-primary mb-1">{{ project.name }}</h2>
+        <p class="text-[11px] font-mono mb-3" style="color:#5a5a5a;">{{ project.slug }}</p>
+        {% if project.description %}
+        <p class="text-[13px] text-txt-body mb-4 line-clamp-2">{{ project.description }}</p>
+        {% endif %}
+        <div class="flex items-center gap-4 text-[12px] text-txt-muted font-body">
+            <span class="flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full" style="background:#6366f1;"></span>
+                {{ project.feature_count }} feature{{ 's' if project.feature_count != 1 }}
+            </span>
+            <span class="flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full" style="background:#5cc8b4;"></span>
+                {{ project.story_count }} stor{{ 'ies' if project.story_count != 1 else 'y' }}
+            </span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

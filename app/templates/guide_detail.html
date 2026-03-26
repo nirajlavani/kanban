@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ guide.title }} — Guides{% endblock %}
+
+{% set category_meta = {
+    'workflow':  {'color': '#6366f1', 'icon': '⚙', 'label': 'Workflow'},
+    'structure': {'color': '#7c6bc4', 'icon': '🏗', 'label': 'Structure'},
+    'social':    {'color': '#d4745f', 'icon': '💬', 'label': 'Social'},
+    'reference': {'color': '#4a9ec4', 'icon': '📖', 'label': 'Reference'},
+    'culture':   {'color': '#3aab8c', 'icon': '🤝', 'label': 'Culture'},
+} %}
+{% set cm = category_meta.get(guide.category, {'color': '#5a5a5a', 'icon': '📄', 'label': guide.category}) %}
+
+{% set audience_badge = {
+    'all':    {'bg': 'rgba(99,102,241,0.12)', 'text': '#a5a8fc', 'label': 'Everyone'},
+    'agents': {'bg': 'rgba(124,107,196,0.12)', 'text': '#b49af0', 'label': 'Agents'},
+    'alfred': {'bg': 'rgba(201,162,77,0.12)', 'text': '#e8c46a', 'label': 'Alfred Only'},
+} %}
+{% set ab = audience_badge.get(guide.audience, {'bg': 'rgba(90,90,90,0.12)', 'text': '#8a8a8a', 'label': guide.audience}) %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <a href="/guides" class="inline-flex items-center gap-1.5 text-[13px] font-body font-medium mb-6 hover:text-txt-primary transition-smooth" style="color:#5a5a5a;">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        Back to Guides
+    </a>
+
+    <div class="rounded-card card-shadow p-8" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <div class="flex items-center gap-2 mb-4">
+            <span class="text-[11px] px-2.5 py-0.5 rounded-full font-medium font-body" style="background:{{ cm.color }}15; color:{{ cm.color }};">{{ cm.icon }} {{ cm.label }}</span>
+            <span class="text-[11px] px-2.5 py-0.5 rounded-full font-medium font-body" style="background:{{ ab.bg }}; color:{{ ab.text }};">{{ ab.label }}</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded" style="background:#1e1e1e; color:#5a5a5a;">{{ guide.slug }}</span>
+        </div>
+
+        <h1 class="font-heading text-[28px] text-txt-primary mb-3">{{ guide.title }}</h1>
+
+        {% if guide.summary %}
+        <p class="text-[14px] font-body mb-6 leading-relaxed" style="color:{{ cm.color }};">{{ guide.summary }}</p>
+        {% endif %}
+
+        <div class="text-[10px] font-body mb-8 flex items-center gap-3" style="color:#3a3a3a;">
+            <span>API: <code class="text-[11px] px-1.5 py-0.5 rounded text-brand font-mono" style="background:#1e1e1e;">GET /api/guides/{{ guide.slug }}</code></span>
+        </div>
+
+        <div class="guide-content prose prose-invert font-body text-[14px] leading-relaxed" style="color:#9a9a9a;">
+            {{ guide.content_html | safe }}
+        </div>
+    </div>
+</div>
+
+<style>
+.guide-content h1 { font-family: 'Do Hyeon', sans-serif; font-size: 22px; color: #f5f5f5; margin: 32px 0 12px; }
+.guide-content h2 { font-family: 'Do Hyeon', sans-serif; font-size: 18px; color: #f5f5f5; margin: 28px 0 10px; }
+.guide-content h3 { font-family: 'Do Hyeon', sans-serif; font-size: 15px; color: #9a9a9a; margin: 20px 0 8px; }
+.guide-content p { margin: 8px 0; }
+.guide-content ul, .guide-content ol { margin: 8px 0; padding-left: 24px; }
+.guide-content li { margin: 4px 0; }
+.guide-content code { font-size: 12px; padding: 2px 6px; border-radius: 6px; background: #1e1e1e; color: #a5a8fc; font-family: monospace; }
+.guide-content pre { background: #0d0d0d; border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 16px; overflow-x: auto; margin: 12px 0; }
+.guide-content pre code { background: none; padding: 0; color: #9a9a9a; }
+.guide-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.guide-content th { text-align: left; padding: 8px 12px; background: #1e1e1e; color: #f5f5f5; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.guide-content td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.guide-content strong { color: #f5f5f5; }
+.guide-content a { color: #6366f1; }
+.guide-content hr { border-color: rgba(255,255,255,0.04); margin: 24px 0; }
+.guide-content blockquote { border-left: 3px solid #6366f1; padding-left: 16px; margin: 12px 0; color: #5a5a5a; }
+.guide-content input[type="checkbox"] { margin-right: 6px; accent-color: #6366f1; }
+</style>
+{% endblock %}

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Lavani Labs{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        base:    { DEFAULT: '#0d0d0d' },
+                        surface: { DEFAULT: '#161616' },
+                        raised:  { DEFAULT: '#1e1e1e' },
+                        overlay: { DEFAULT: '#0a0a0a' },
+                        txt:     { primary: '#f5f5f5', body: '#9a9a9a', muted: '#5a5a5a' },
+                        brand:   { DEFAULT: '#6366f1' },
+                        accent:  {
+                            violet: '#6366f1', gold: '#c9a24d', coral: '#e07a5f',
+                            sage: '#b8d4a3', mint: '#d4e4bc', teal: '#5cc8b4',
+                        },
+                    },
+                    fontFamily: {
+                        heading: ['"Do Hyeon"', 'sans-serif'],
+                        body: ['"Poppins"', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        card: '16px',
+                        btn: '12px',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-base text-txt-body min-h-screen font-body">
+
+    <!-- Top header bar -->
+    <header class="fixed top-0 left-0 right-0 z-50 bg-surface border-b border-[#1e1e1e] h-14 flex items-center px-4">
+        <button onclick="toggleSidebar()" class="w-9 h-9 flex items-center justify-center rounded-btn text-txt-muted hover:text-txt-primary hover:bg-raised transition-smooth" aria-label="Toggle navigation">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="flex-1 text-center">
+            <a href="/" class="font-heading text-[24px] text-txt-primary tracking-tight leading-none">
+                Lavani Labs
+            </a>
+        </div>
+        <div class="w-9"></div>
+    </header>
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay" class="fixed inset-0 z-30 bg-black/40 hidden lg:hidden" onclick="closeSidebar()"></div>
+
+    <!-- Sidebar drawer -->
+    <aside id="sidebar" class="fixed top-14 left-0 z-40 h-[calc(100vh-3.5rem)] bg-surface border-r border-[#1e1e1e] flex flex-col transition-all duration-200 ease-in-out overflow-hidden sidebar-expanded">
+        <nav class="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+            {% set nav_items = [
+                ('/', 'Kanban Board', 'board', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>'),
+                ('/projects', 'Projects', 'projects', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>'),
+                ('/features', 'Features', 'features', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 01-1.806-1.741L3.5 8.5m0 0L5 5h14l1.5 3.5M3.5 8.5h17"/>'),
+                ('/agents', 'Agents', 'agents', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>'),
+                ('/chitchat', 'ChitChat', 'chitchat', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>'),
+                ('/notifications', 'Notifications', 'notifications', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>'),
+                ('/guides', 'Guides', 'guides', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>'),
+                ('/history', 'History', 'history', '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>')
+            ] %}
+            {% for href, label, key, icon_path in nav_items %}
+            <a href="{{ href }}" class="sidebar-link group flex items-center gap-3 px-3 py-2.5 rounded-btn transition-smooth
+                {% if active == key %}bg-brand text-white{% else %}text-txt-muted hover:bg-raised hover:text-txt-primary{% endif %}"
+                title="{{ label }}">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">{{ icon_path | safe }}</svg>
+                <span class="sidebar-label text-[13px] font-semibold whitespace-nowrap overflow-hidden">{{ label }}</span>
+            </a>
+            {% endfor %}
+        </nav>
+
+        <!-- Collapse toggle at bottom -->
+        <div class="px-2 py-3 border-t border-[#1e1e1e]">
+            <button onclick="toggleSidebar()" class="sidebar-link group flex items-center gap-3 px-3 py-2.5 rounded-btn text-txt-muted hover:bg-raised hover:text-txt-primary transition-smooth w-full" title="Collapse">
+                <svg id="collapse-icon" class="w-5 h-5 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+                <span class="sidebar-label text-[13px] font-semibold whitespace-nowrap overflow-hidden">Collapse</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main content -->
+    <main id="main-content" class="pt-14 transition-all duration-200 ease-in-out main-expanded">
+        <div class="max-w-screen-2xl mx-auto px-6 py-8">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+<style>
+    .sidebar-expanded {
+        width: 220px;
+    }
+    .sidebar-collapsed {
+        width: 56px;
+    }
+    .sidebar-collapsed .sidebar-label {
+        opacity: 0;
+        width: 0;
+    }
+    .sidebar-expanded .sidebar-label {
+        opacity: 1;
+        transition: opacity 150ms ease 50ms;
+    }
+    .main-expanded {
+        margin-left: 220px;
+    }
+    .main-collapsed {
+        margin-left: 56px;
+    }
+    @media (max-width: 1023px) {
+        .sidebar-expanded, .sidebar-collapsed {
+            width: 220px;
+        }
+        .main-expanded, .main-collapsed {
+            margin-left: 0;
+        }
+        #sidebar {
+            transform: translateX(-100%);
+        }
+        #sidebar.mobile-open {
+            transform: translateX(0);
+        }
+    }
+</style>
+
+<script>
+(function() {
+    const stored = localStorage.getItem('sidebar-collapsed');
+    const sidebar = document.getElementById('sidebar');
+    const main = document.getElementById('main-content');
+    const icon = document.getElementById('collapse-icon');
+
+    if (stored === 'true' && window.innerWidth >= 1024) {
+        sidebar.classList.remove('sidebar-expanded');
+        sidebar.classList.add('sidebar-collapsed');
+        main.classList.remove('main-expanded');
+        main.classList.add('main-collapsed');
+        icon.style.transform = 'rotate(180deg)';
+    }
+})();
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const main = document.getElementById('main-content');
+    const icon = document.getElementById('collapse-icon');
+    const overlay = document.getElementById('sidebar-overlay');
+
+    if (window.innerWidth < 1024) {
+        sidebar.classList.toggle('mobile-open');
+        overlay.classList.toggle('hidden');
+        return;
+    }
+
+    const isCollapsed = sidebar.classList.contains('sidebar-collapsed');
+    if (isCollapsed) {
+        sidebar.classList.remove('sidebar-collapsed');
+        sidebar.classList.add('sidebar-expanded');
+        main.classList.remove('main-collapsed');
+        main.classList.add('main-expanded');
+        icon.style.transform = 'rotate(0deg)';
+        localStorage.setItem('sidebar-collapsed', 'false');
+    } else {
+        sidebar.classList.remove('sidebar-expanded');
+        sidebar.classList.add('sidebar-collapsed');
+        main.classList.remove('main-expanded');
+        main.classList.add('main-collapsed');
+        icon.style.transform = 'rotate(180deg)';
+        localStorage.setItem('sidebar-collapsed', 'true');
+    }
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay').classList.add('hidden');
+}
+</script>
+
+</body>
+</html>

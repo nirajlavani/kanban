@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}History — Lavani Labs{% endblock %}
+
+{% set agent_text_color = {
+    'vio': '#d4ccf8', 'neo': '#b8ead8', 'zeo': '#b8ddf0', 'alfred': '#f5e8c0', 'seo': '#f5ccc0'
+} %}
+
+{% block content %}
+<h1 class="font-heading text-[26px] text-txt-primary mb-8">Completed Features</h1>
+
+{% if not features %}
+<div class="text-center py-20">
+    <p class="font-heading text-[20px] text-txt-muted mb-2">No completed features yet</p>
+    <p class="text-[13px] text-txt-muted font-body">Completed features and their stories will appear here.</p>
+</div>
+{% else %}
+<div class="space-y-6">
+    {% for feature in features %}
+    <div class="rounded-card p-6 card-shadow" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="font-heading text-[20px]" style="color:#8ae8d4;">{{ feature.title }}</h2>
+            <div class="text-[12px] text-txt-muted font-body">
+                {% if feature.project_name %}{{ feature.project_name }} &middot; {% endif %}
+                {% if feature.completed_at %}Completed {{ feature.completed_at.strftime('%b %d, %Y') }}{% endif %}
+            </div>
+        </div>
+        {% if feature.description %}
+        <p class="text-[13px] text-txt-body mb-4">{{ feature.description }}</p>
+        {% endif %}
+
+        {% if feature.stories %}
+        <div class="space-y-2">
+            {% for story in feature.stories %}
+            <div class="flex items-center justify-between text-[13px] rounded-btn px-4 py-3 font-body transition-smooth" style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.03);">
+                <div class="flex items-center gap-2.5">
+                    <span style="color:#5cc8b4;">&#10003;</span>
+                    <span class="text-txt-body">{{ story.title }}</span>
+                </div>
+                <div class="flex items-center gap-3 text-[12px]">
+                    {% if story.assigned_to %}
+                    <span style="color:{{ agent_text_color.get(story.assigned_to, '#9a9a9a') }}">{{ story.assigned_to }}</span>
+                    {% endif %}
+                    <span class="font-mono text-txt-muted">{{ story.points }}pt</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

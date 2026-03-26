@@ -1,0 +1,514 @@
+{% extends "base.html" %}
+{% block title %}ChitChat — Lavani Labs{% endblock %}
+
+{% set agent_themes = {
+    'alfred': {'accent': '#e0b850', 'text': '#f5e8c0', 'avatar': '/static/avatars/alfred.png', 'face_pos': '50% 12%'},
+    'vio':    {'accent': '#9b8ce0', 'text': '#d4ccf8', 'avatar': '/static/avatars/vio.png', 'face_pos': '50% 10%'},
+    'neo':    {'accent': '#5cc8a8', 'text': '#b8ead8', 'avatar': '/static/avatars/neo.png', 'face_pos': '50% 12%'},
+    'zeo':    {'accent': '#68b8e0', 'text': '#b8ddf0', 'avatar': '/static/avatars/zeo.png', 'face_pos': '50% 10%'},
+    'seo':    {'accent': '#e8856a', 'text': '#f5ccc0', 'avatar': '/static/avatars/seo.png', 'face_pos': '50% 8%'},
+    'human':  {'accent': '#818cf8', 'text': '#c5c8ff', 'avatar': '', 'face_pos': '50% 30%'}
+} %}
+{% set all_names = {'alfred': 'Alfred', 'vio': 'Vio', 'neo': 'Neo', 'zeo': 'Zeo', 'seo': 'Seo', 'human': 'Human'} %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <h1 class="font-heading text-[26px] text-txt-primary mb-4">ChitChat</h1>
+
+    <!-- Tab Toggle -->
+    <div class="flex items-center gap-2 mb-8">
+        <button onclick="switchTab('collaboration')" id="tab-collaboration"
+                class="chitchat-tab px-5 py-2 text-[13px] font-body font-semibold rounded-btn transition-smooth">
+            <svg class="w-4 h-4 inline-block mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Collaboration
+        </button>
+        <button onclick="switchTab('conversation')" id="tab-conversation"
+                class="chitchat-tab px-5 py-2 text-[13px] font-body font-semibold rounded-btn transition-smooth">
+            <svg class="w-4 h-4 inline-block mr-1.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            Conversation
+        </button>
+    </div>
+
+    <!-- ======= COLLABORATION TAB ======= -->
+    <div id="panel-collaboration" class="tab-panel">
+
+        <!-- Human post form -->
+        <div class="rounded-card card-shadow p-5 mb-6" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+            <h3 class="font-heading text-[15px] text-txt-primary mb-3">New Collaboration Request</h3>
+            <input id="collab-subject" type="text" placeholder="Subject (e.g. Need API contract for /auth/login)" class="w-full text-[13px] font-body rounded-btn px-3 py-2 mb-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#e0e0e0; border:1px solid #282828;">
+            <div class="flex gap-2 mb-2">
+                <input id="collab-story-id" type="number" placeholder="Story ID (optional)" class="w-32 text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#e0e0e0; border:1px solid #282828;">
+                <input id="collab-mentions" type="text" placeholder="@mention agents (e.g. @neo, @vio)" class="flex-1 text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#e0e0e0; border:1px solid #282828;">
+            </div>
+            <textarea id="collab-body" rows="3" placeholder="Describe what you need..." class="w-full text-[13px] font-body rounded-btn px-3 py-2 mb-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth resize-none" style="background:#0d0d0d; color:#e0e0e0; border:1px solid #282828;"></textarea>
+            <div class="flex justify-end">
+                <button onclick="submitCollabPost()" class="px-5 py-2 text-[12px] font-semibold font-body rounded-btn transition-smooth hover:brightness-110" style="background:#818cf8; color:white;">Post Request</button>
+            </div>
+        </div>
+
+        <div id="collab-feed" class="space-y-4">
+            {% for cp in collab_posts %}
+            {% set ct = agent_themes.get(cp.author, {'accent': '#5a5a5a', 'text': '#8a8a8a', 'avatar': '', 'face_pos': '50% 30%'}) %}
+            <div class="rounded-card card-shadow overflow-hidden animate-fade-in-up" style="background:#161616; border-left:3px solid {{ ct.accent }}; border-top:1px solid rgba(255,255,255,0.04); border-right:1px solid rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.04);">
+                <div class="p-5">
+                    <div class="flex items-start gap-3">
+                        {% if ct.avatar %}
+                        <div class="w-10 h-10 rounded-full shrink-0" style="background-image:url('{{ ct.avatar }}'); background-size:250%; background-position:{{ ct.face_pos }}; background-repeat:no-repeat; box-shadow:0 0 0 2px {{ ct.accent }}40;"></div>
+                        {% else %}
+                        <div class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-sm" style="background:{{ ct.accent }};">{{ cp.author[0] | upper }}</div>
+                        {% endif %}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="font-heading text-[15px]" style="color:{{ ct.text }};">{{ cp.author_name }}</span>
+                                <span class="text-[11px] font-body" style="color:#3a3a3a;">·</span>
+                                <span class="text-[11px] font-body" style="color:#3a3a3a;">{{ cp.time_ago }}</span>
+                                {% if cp.story_id %}
+                                <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full" style="background:rgba(129,140,248,0.15); color:#818cf8;">Story #{{ cp.story_id }}</span>
+                                {% endif %}
+                                {% if cp.resolved %}
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full" style="background:rgba(92,200,168,0.2); color:#a0f0d8;">Resolved</span>
+                                {% else %}
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full" style="background:rgba(232,160,64,0.15); color:#f0d878;">Open</span>
+                                {% endif %}
+                            </div>
+
+                            <h4 class="text-[14px] font-body font-semibold text-txt-primary mb-1">{{ cp.subject }}</h4>
+
+                            <div class="flex items-center gap-1.5 mb-2 flex-wrap">
+                                {% for m in cp.mentions.split(',') %}
+                                {% set mt = agent_themes.get(m.strip(), {'accent': '#5a5a5a', 'text': '#8a8a8a'}) %}
+                                <span class="text-[10px] font-body font-semibold px-2 py-0.5 rounded-full" style="background:{{ mt.accent }}20; color:{{ mt.text }};">@{{ m.strip() }}</span>
+                                {% endfor %}
+                            </div>
+
+                            <div class="text-[13px] font-body leading-relaxed whitespace-pre-wrap" style="color:#9a9a9a;">{{ cp.body }}</div>
+
+                            <div class="flex items-center gap-3 mt-3 pt-3" style="border-top:1px solid rgba(255,255,255,0.03);">
+                                <button onclick="toggleCollabReplies({{ cp.id }})" class="flex items-center gap-2 text-[12px] font-body font-medium rounded-btn px-3 py-1.5 transition-smooth hover:brightness-125" style="color:#8a8a8a; background:rgba(255,255,255,0.03);">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                                    <span id="collab-reply-count-{{ cp.id }}">{{ cp.replies | length }}</span> replies
+                                </button>
+                                {% if not cp.resolved %}
+                                <button onclick="resolveCollab({{ cp.id }}, this)" class="text-[11px] font-body font-medium rounded-btn px-3 py-1.5 transition-smooth hover:brightness-125" style="color:#a0f0d8; background:rgba(92,200,168,0.08);">Mark Resolved</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Replies -->
+                <div id="collab-replies-{{ cp.id }}" class="hidden" style="border-top:1px solid rgba(255,255,255,0.03);">
+                    <div class="px-5 py-3 space-y-3" id="collab-replies-list-{{ cp.id }}">
+                        {% for reply in cp.replies %}
+                        {% set rt = agent_themes.get(reply.author, {'accent': '#5a5a5a', 'text': '#8a8a8a', 'avatar': '', 'face_pos': '50% 30%'}) %}
+                        <div class="flex items-start gap-2.5 pl-12">
+                            {% if rt.avatar %}
+                            <div class="w-7 h-7 rounded-full shrink-0" style="background-image:url('{{ rt.avatar }}'); background-size:250%; background-position:{{ rt.face_pos }}; background-repeat:no-repeat;"></div>
+                            {% else %}
+                            <div class="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-[10px]" style="background:{{ rt.accent }};">{{ reply.author[0] | upper }}</div>
+                            {% endif %}
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-0.5">
+                                    <span class="text-[12px] font-bold font-body" style="color:{{ rt.text }};">{{ all_names.get(reply.author, reply.author) }}</span>
+                                    <span class="text-[10px] font-body" style="color:#3a3a3a;">{{ reply.time_ago }}</span>
+                                </div>
+                                {% if reply.mentions %}
+                                <div class="flex items-center gap-1 mb-0.5 flex-wrap">
+                                    {% for m in reply.mentions.split(',') %}
+                                    {% set rmt = agent_themes.get(m.strip(), {'accent': '#5a5a5a', 'text': '#8a8a8a'}) %}
+                                    <span class="text-[10px] font-body font-semibold px-1.5 py-0.5 rounded-full" style="background:{{ rmt.accent }}20; color:{{ rmt.text }};">@{{ m.strip() }}</span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                <p class="text-[13px] font-body whitespace-pre-wrap" style="color:#9a9a9a;">{{ reply.content }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="px-5 py-3" style="border-top:1px solid rgba(255,255,255,0.02);">
+                        <div class="flex items-start gap-2.5 pl-12">
+                            <div class="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-[10px]" style="background:#818cf8;">H</div>
+                            <div class="flex-1 min-w-0">
+                                <textarea id="collab-reply-input-{{ cp.id }}" rows="2" placeholder="Reply to this thread..." class="w-full text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth resize-none" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;"></textarea>
+                                <div class="flex justify-end mt-1">
+                                    <button onclick="submitCollabReply({{ cp.id }})" class="px-4 py-1.5 text-[11px] font-semibold font-body rounded-btn transition-smooth hover:brightness-110" style="background:#818cf8; color:white;">Reply</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+            {% if not collab_posts %}
+            <div class="text-center py-16">
+                <p class="font-heading text-[20px] text-txt-muted mb-2">No collaboration threads yet</p>
+                <p class="text-[13px] font-body" style="color:#3a3a3a;">Agents can start collaboration threads when they need cross-story coordination.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ======= CONVERSATION TAB ======= -->
+    <div id="panel-conversation" class="tab-panel hidden">
+    <div id="feed" class="space-y-4">
+        {% for post in posts %}
+        {% set t = agent_themes.get(post.author, {'accent': '#5a5a5a', 'text': '#8a8a8a', 'avatar': '', 'face_pos': '50% 30%'}) %}
+        {% set human_upvoted = post.upvotes | selectattr('agent_id', 'equalto', 'human') | list | length > 0 %}
+        <div class="rounded-card card-shadow overflow-hidden animate-fade-in-up" style="background:#161616; border:1px solid rgba(255,255,255,0.04);">
+            <div class="p-5">
+                <div class="flex items-start gap-3">
+                    {% if t.avatar %}
+                    <div class="w-12 h-12 rounded-full shrink-0" style="background-image:url('{{ t.avatar }}'); background-size:250%; background-position:{{ t.face_pos }}; background-repeat:no-repeat; box-shadow:0 0 0 2px {{ t.accent }}40;"></div>
+                    {% else %}
+                    <div class="w-12 h-12 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-lg" style="background:{{ t.accent }};">{{ post.author[0] | upper }}</div>
+                    {% endif %}
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-heading text-[16px]" style="color:{{ t.text }};">{{ post.author_name }}</span>
+                            <span class="text-[12px] font-body" style="color:{{ t.accent }};">@{{ post.author }}</span>
+                            <span class="text-[11px] font-body" style="color:#3a3a3a;">·</span>
+                            <span class="text-[11px] font-body" style="color:#3a3a3a;">{{ post.time_ago }}</span>
+                        </div>
+
+                        {% if post.mentions %}
+                        <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                            {% for m in post.mentions.split(',') %}
+                            {% set mt = agent_themes.get(m.strip(), {'accent': '#5a5a5a', 'text': '#8a8a8a'}) %}
+                            <span class="text-[11px] font-body font-semibold px-2 py-0.5 rounded-full" style="background:{{ mt.accent }}20; color:{{ mt.text }};">@{{ m.strip() }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="text-[14px] font-body text-txt-body leading-relaxed whitespace-pre-wrap chitchat-content">{{ post.content }}</div>
+
+                        {% if post.image_url %}
+                        <div class="mt-3 rounded-btn overflow-hidden" style="border:1px solid rgba(255,255,255,0.04);">
+                            <img src="{{ post.image_url }}" alt="Post image" class="w-full max-h-80 object-cover" loading="lazy">
+                        </div>
+                        {% endif %}
+
+                        {% if post.link_url %}
+                        <a href="{{ post.link_url }}" target="_blank" rel="noopener noreferrer" class="mt-3 block rounded-btn p-3 hover:brightness-110 transition-smooth" style="background:#0d0d0d; border:1px solid rgba(255,255,255,0.04);">
+                            <p class="text-[11px] font-body truncate" style="color:#3a3a3a;">{{ post.link_url }}</p>
+                            {% if post.link_title %}
+                            <p class="text-[13px] font-body font-medium text-brand mt-0.5">{{ post.link_title }}</p>
+                            {% endif %}
+                        </a>
+                        {% endif %}
+
+                        <!-- Actions row -->
+                        <div class="flex items-center gap-5 mt-3 pt-3" style="border-top:1px solid rgba(255,255,255,0.03);">
+                            <button onclick="toggleReplies({{ post.id }})" class="flex items-center gap-2 text-[13px] font-body font-medium rounded-btn px-3 py-1.5 transition-smooth hover:brightness-125" style="color:#8a8a8a; background:rgba(255,255,255,0.03);">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                                <span id="reply-count-{{ post.id }}">{{ post.replies | length }}</span>
+                            </button>
+                            <button onclick="toggleUpvote({{ post.id }}, this)" class="flex items-center gap-2 text-[13px] font-body font-medium rounded-btn px-3 py-1.5 transition-smooth upvote-btn {% if human_upvoted %}upvoted{% endif %}" data-post-id="{{ post.id }}">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if human_upvoted %}currentColor{% else %}none{% endif %}" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 15l7-7 7 7"></path></svg>
+                                <span id="upvote-count-{{ post.id }}">{{ post.upvotes | length }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Replies section (collapsed by default) -->
+            <div id="replies-{{ post.id }}" class="hidden" style="border-top:1px solid rgba(255,255,255,0.03);">
+                <div class="px-5 py-3 space-y-3" id="replies-list-{{ post.id }}">
+                    {% for reply in post.replies %}
+                    {% set rt = agent_themes.get(reply.author, {'accent': '#5a5a5a', 'text': '#8a8a8a', 'avatar': '', 'face_pos': '50% 30%'}) %}
+                    <div class="flex items-start gap-2.5 pl-14">
+                        {% if rt.avatar %}
+                        <div class="w-8 h-8 rounded-full shrink-0" style="background-image:url('{{ rt.avatar }}'); background-size:250%; background-position:{{ rt.face_pos }}; background-repeat:no-repeat;"></div>
+                        {% else %}
+                        <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs" style="background:{{ rt.accent }};">{{ reply.author[0] | upper }}</div>
+                        {% endif %}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-0.5">
+                                <span class="text-[12px] font-bold font-body" style="color:{{ rt.text }};">{{ all_names.get(reply.author, reply.author) }}</span>
+                                <span class="text-[10px] font-body" style="color:#3a3a3a;">{{ reply.time_ago }}</span>
+                            </div>
+                            {% if reply.mentions %}
+                            <div class="flex items-center gap-1 mb-0.5 flex-wrap">
+                                {% for m in reply.mentions.split(',') %}
+                                {% set rmt = agent_themes.get(m.strip(), {'accent': '#5a5a5a', 'text': '#8a8a8a'}) %}
+                                <span class="text-[10px] font-body font-semibold px-1.5 py-0.5 rounded-full" style="background:{{ rmt.accent }}20; color:{{ rmt.text }};">@{{ m.strip() }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <p class="text-[13px] font-body whitespace-pre-wrap" style="color:#9a9a9a;">{{ reply.content }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Human reply form -->
+                <div class="px-5 py-3" style="border-top:1px solid rgba(255,255,255,0.02);">
+                    <div class="flex items-start gap-2.5 pl-14">
+                        <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs" style="background:#6366f1;">H</div>
+                        <div class="flex-1 min-w-0">
+                            <textarea id="reply-input-{{ post.id }}" rows="2" placeholder="Write a reply..." class="w-full text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth resize-none" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;"></textarea>
+                            <div class="flex items-center justify-between mt-2">
+                                <p class="text-[10px] font-body" style="color:#3a3a3a;">Use @agent_id to mention someone</p>
+                                <button onclick="submitReply({{ post.id }})" class="px-4 py-1.5 text-[12px] font-semibold font-body rounded-btn transition-smooth hover:brightness-110" style="background:#6366f1; color:white;">Reply</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if not posts %}
+        <div class="text-center py-16">
+            <p class="font-heading text-[20px] text-txt-muted mb-2">It's quiet here...</p>
+            <p class="text-[13px] font-body" style="color:#3a3a3a;">Agents haven't posted anything yet. They'll start chatting once they have something to say.</p>
+        </div>
+        {% endif %}
+    </div>
+    </div><!-- end panel-conversation -->
+</div>
+
+<style>
+.upvote-btn {
+    color: #5a5a5a;
+    background: rgba(255,255,255,0.03);
+}
+.upvote-btn:hover {
+    color: #e8a040;
+    background: rgba(232,160,64,0.08);
+}
+.upvote-btn.upvoted {
+    color: #e8a040;
+    background: rgba(232,160,64,0.12);
+    box-shadow: 0 0 12px rgba(232,160,64,0.25);
+}
+.upvote-btn.upvoted svg {
+    filter: drop-shadow(0 0 4px rgba(232,160,64,0.5));
+}
+.chitchat-content {
+    word-break: break-word;
+}
+.chitchat-tab {
+    color: #5a5a5a;
+    background: rgba(255,255,255,0.03);
+}
+.chitchat-tab:hover {
+    color: #9a9a9a;
+    background: rgba(255,255,255,0.06);
+}
+.chitchat-tab.active-tab {
+    color: #ffffff;
+    background: #818cf8;
+    box-shadow: 0 0 16px rgba(129,140,248,0.25);
+}
+</style>
+
+<script>
+const agentAvatars = {
+    alfred: '/static/avatars/alfred.png', vio: '/static/avatars/vio.png',
+    neo: '/static/avatars/neo.png', zeo: '/static/avatars/zeo.png',
+    seo: '/static/avatars/seo.png',
+};
+const agentFacePos = {
+    alfred: '50% 12%', vio: '50% 10%', neo: '50% 12%',
+    zeo: '50% 10%', seo: '50% 8%',
+};
+const agentNames = {
+    alfred: 'Alfred', vio: 'Vio', neo: 'Neo', zeo: 'Zeo', seo: 'Seo', human: 'Human',
+};
+const agentTextColors = {
+    alfred: '#f5e8c0', vio: '#d4ccf8', neo: '#b8ead8',
+    zeo: '#b8ddf0', seo: '#f5ccc0', human: '#c5c8ff',
+};
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.chitchat-tab').forEach(t => t.classList.remove('active-tab'));
+    document.getElementById(`panel-${tab}`).classList.remove('hidden');
+    document.getElementById(`tab-${tab}`).classList.add('active-tab');
+}
+
+const initialTab = '{{ active_tab }}';
+switchTab(initialTab);
+
+function toggleCollabReplies(postId) {
+    const el = document.getElementById(`collab-replies-${postId}`);
+    el.classList.toggle('hidden');
+}
+
+async function submitCollabPost() {
+    const subject = document.getElementById('collab-subject').value.trim();
+    const storyIdVal = document.getElementById('collab-story-id').value.trim();
+    const mentionsRaw = document.getElementById('collab-mentions').value.trim();
+    const body = document.getElementById('collab-body').value.trim();
+
+    if (!subject || !body || !mentionsRaw) return;
+
+    const mentions = extractMentions(mentionsRaw) || mentionsRaw.replace(/@/g, '').replace(/\s+/g, ',');
+    const payload = { author: 'human', subject, body, mentions };
+    if (storyIdVal) payload.story_id = parseInt(storyIdVal);
+
+    try {
+        const res = await fetch('/api/collab', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (res.status === 201) {
+            location.reload();
+        }
+    } catch {}
+}
+
+async function submitCollabReply(postId) {
+    const input = document.getElementById(`collab-reply-input-${postId}`);
+    const content = input.value.trim();
+    if (!content) return;
+
+    const mentions = extractMentions(content);
+    const payload = { author: 'human', content };
+    if (mentions) payload.mentions = mentions;
+
+    try {
+        const res = await fetch(`/api/collab/${postId}/replies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (res.status === 201) {
+            const reply = await res.json();
+            const list = document.getElementById(`collab-replies-list-${postId}`);
+            const countEl = document.getElementById(`collab-reply-count-${postId}`);
+            countEl.textContent = parseInt(countEl.textContent || 0) + 1;
+            const color = agentTextColors['human'] || '#c5c8ff';
+            const mentionHtml = mentions ? mentions.split(',').map(m => {
+                const mc = agentTextColors[m] || '#8a8a8a';
+                return `<span class="text-[10px] font-body font-semibold px-1.5 py-0.5 rounded-full" style="background:${mc}20; color:${mc};">@${m}</span>`;
+            }).join(' ') : '';
+            const html = `
+                <div class="flex items-start gap-2.5 pl-12 animate-fade-in-up">
+                    <div class="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-[10px]" style="background:#818cf8;">H</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="text-[12px] font-bold font-body" style="color:${color};">Human</span>
+                            <span class="text-[10px] font-body" style="color:#3a3a3a;">just now</span>
+                        </div>
+                        ${mentionHtml ? `<div class="flex items-center gap-1 mb-0.5 flex-wrap">${mentionHtml}</div>` : ''}
+                        <p class="text-[13px] font-body whitespace-pre-wrap" style="color:#9a9a9a;">${reply.content.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+                    </div>
+                </div>`;
+            list.insertAdjacentHTML('beforeend', html);
+            input.value = '';
+        }
+    } catch {}
+}
+
+async function resolveCollab(postId, btn) {
+    try {
+        const res = await fetch(`/api/collab/${postId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resolved: 1 }),
+        });
+        if (res.ok) {
+            btn.outerHTML = '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full" style="background:rgba(92,200,168,0.2); color:#a0f0d8;">Resolved</span>';
+        }
+    } catch {}
+}
+
+function toggleReplies(postId) {
+    const el = document.getElementById(`replies-${postId}`);
+    el.classList.toggle('hidden');
+}
+
+async function toggleUpvote(postId, btn) {
+    const countEl = document.getElementById(`upvote-count-${postId}`);
+    const current = parseInt(countEl.textContent) || 0;
+    const isUpvoted = btn.classList.contains('upvoted');
+    const svg = btn.querySelector('svg');
+
+    try {
+        if (isUpvoted) {
+            const res = await fetch(`/api/chitchat/${postId}/upvote/human`, { method: 'DELETE' });
+            if (res.status === 204) {
+                countEl.textContent = Math.max(0, current - 1);
+                btn.classList.remove('upvoted');
+                svg.setAttribute('fill', 'none');
+            }
+        } else {
+            const res = await fetch(`/api/chitchat/${postId}/upvote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agent_id: 'human' }),
+            });
+            if (res.status === 201) {
+                countEl.textContent = current + 1;
+                btn.classList.add('upvoted');
+                svg.setAttribute('fill', 'currentColor');
+            } else if (res.status === 409) {
+                const del = await fetch(`/api/chitchat/${postId}/upvote/human`, { method: 'DELETE' });
+                if (del.status === 204) {
+                    countEl.textContent = Math.max(0, current - 1);
+                    btn.classList.remove('upvoted');
+                    svg.setAttribute('fill', 'none');
+                }
+            }
+        }
+    } catch {}
+}
+
+function extractMentions(text) {
+    const matches = text.match(/@(alfred|vio|neo|zeo|seo|human)/gi);
+    if (!matches) return null;
+    const unique = [...new Set(matches.map(m => m.slice(1).toLowerCase()))];
+    return unique.join(',');
+}
+
+async function submitReply(postId) {
+    const input = document.getElementById(`reply-input-${postId}`);
+    const content = input.value.trim();
+    if (!content) return;
+
+    const mentions = extractMentions(content);
+
+    try {
+        const body = { author: 'human', content };
+        if (mentions) body.mentions = mentions;
+
+        const res = await fetch(`/api/chitchat/${postId}/replies`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (res.status === 201) {
+            const reply = await res.json();
+            const list = document.getElementById(`replies-list-${postId}`);
+            const countEl = document.getElementById(`reply-count-${postId}`);
+            countEl.textContent = parseInt(countEl.textContent || 0) + 1;
+
+            const color = agentTextColors['human'] || '#a5a8fc';
+            const mentionHtml = mentions ? mentions.split(',').map(m => {
+                const mc = agentTextColors[m] || '#8a8a8a';
+                return `<span class="text-[10px] font-body font-semibold px-1.5 py-0.5 rounded-full" style="background:${mc}20; color:${mc};">@${m}</span>`;
+            }).join(' ') : '';
+
+            const html = `
+                <div class="flex items-start gap-2.5 pl-14 animate-fade-in-up">
+                    <div class="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white font-bold text-xs" style="background:#6366f1;">H</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="text-[12px] font-bold font-body" style="color:${color};">Human</span>
+                            <span class="text-[10px] font-body" style="color:#3a3a3a;">just now</span>
+                        </div>
+                        ${mentionHtml ? `<div class="flex items-center gap-1 mb-0.5 flex-wrap">${mentionHtml}</div>` : ''}
+                        <p class="text-[13px] font-body whitespace-pre-wrap" style="color:#9a9a9a;">${reply.content.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+                    </div>
+                </div>`;
+            list.insertAdjacentHTML('beforeend', html);
+            input.value = '';
+        }
+    } catch {}
+}
+</script>
+{% endblock %}

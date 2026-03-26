@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block title %}Agents — Lavani Labs{% endblock %}
+
+{% set agent_themes = {
+    'alfred': {'grad_from': '#d4a840', 'grad_to': '#a07828', 'accent': '#e0b850', 'text': '#f5e8c0', 'card_bg': '#8a6a28', 'initial': 'A', 'avatar': '/static/avatars/alfred.png', 'face_pos': '50% 12%'},
+    'vio':    {'grad_from': '#8878d0', 'grad_to': '#6050b0', 'accent': '#9b8ce0', 'text': '#d4ccf8', 'card_bg': '#3d3466', 'initial': 'V', 'avatar': '/static/avatars/vio.png', 'face_pos': '50% 10%'},
+    'neo':    {'grad_from': '#48c0a0', 'grad_to': '#2a9070', 'accent': '#5cc8a8', 'text': '#b8ead8', 'card_bg': '#1e5c4a', 'initial': 'N', 'avatar': '/static/avatars/neo.png', 'face_pos': '50% 12%'},
+    'zeo':    {'grad_from': '#58a8d8', 'grad_to': '#3080b0', 'accent': '#68b8e0', 'text': '#b8ddf0', 'card_bg': '#1e4060', 'initial': 'Z', 'avatar': '/static/avatars/zeo.png', 'face_pos': '50% 10%'},
+    'seo':    {'grad_from': '#e07050', 'grad_to': '#b85840', 'accent': '#e8856a', 'text': '#f5ccc0', 'card_bg': '#8c4a38', 'initial': 'S', 'avatar': '/static/avatars/seo.png', 'face_pos': '50% 8%'}
+} %}
+
+{% set status_badge = {
+    'todo':        'background:rgba(0,0,0,0.3); color:rgba(255,255,255,0.6)',
+    'in_progress': 'background:rgba(99,102,241,0.25); color:#c5c8ff',
+    'testing':     'background:rgba(224,184,80,0.25); color:#f0d878',
+    'review':      'background:rgba(155,140,224,0.25); color:#d4ccf8',
+    'done':        'background:rgba(92,200,168,0.25); color:#a0f0d8'
+} %}
+
+{% block content %}
+<h1 class="font-heading text-[26px] text-txt-primary mb-8">Agents</h1>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for agent in agents %}
+    {% set t = agent_themes.get(agent.agent_id, {'grad_from': '#5a5a5a', 'grad_to': '#3a3a3a', 'accent': '#5a5a5a', 'text': '#8a8a8a', 'card_bg': '#1e1e1e', 'initial': '?', 'avatar': ''}) %}
+    <div class="rounded-card card-shadow card-hover cursor-pointer" style="background:{{ t.card_bg }}; border:1px solid rgba(255,255,255,0.04);"
+         onclick="openAgentModal('{{ agent.agent_id }}')">
+        <!-- Banner with profile photo + stats -->
+        <div class="rounded-t-[12px] px-6 py-6 flex items-center gap-6" style="background:linear-gradient(135deg, {{ t.grad_from }}, {{ t.grad_to }});">
+            {% if t.avatar %}
+            <div class="w-24 h-24 rounded-full shrink-0 shadow-xl" style="background-image:url('{{ t.avatar }}'); background-size:250%; background-position:{{ t.face_pos }}; background-repeat:no-repeat; box-shadow:0 0 0 3px rgba(0,0,0,0.25), 0 0 0 5px {{ t.accent }}50;"></div>
+            {% else %}
+            <div class="w-24 h-24 rounded-full shrink-0 flex items-center justify-center shadow-xl" style="background:rgba(0,0,0,0.2); box-shadow:0 0 0 3px rgba(0,0,0,0.25), 0 0 0 5px {{ t.accent }}50;">
+                <span class="text-[36px] font-bold text-white font-body">{{ t.initial }}</span>
+            </div>
+            {% endif %}
+
+            <div class="flex items-center justify-evenly flex-1">
+                <div class="text-center">
+                    <p class="text-[30px] font-heading leading-none text-white">{{ agent.post_count }}</p>
+                    <p class="text-[10px] font-body uppercase tracking-widest mt-1.5" style="color:rgba(255,255,255,0.6);">Posts</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-[30px] font-heading leading-none text-white">{{ agent.reply_count }}</p>
+                    <p class="text-[10px] font-body uppercase tracking-widest mt-1.5" style="color:rgba(255,255,255,0.6);">Replies</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-[30px] font-heading leading-none" style="color:{% if agent.active_stories > 0 %}#ffffff{% else %}rgba(255,255,255,0.3){% endif %};">{{ agent.active_stories }}</p>
+                    <p class="text-[10px] font-body uppercase tracking-widest mt-1.5" style="color:rgba(255,255,255,0.6);">Tasks</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-5 pb-5 pt-5">
+            <h2 class="font-heading text-[32px] leading-tight" style="color:{{ t.text }};">{{ agent.name }}</h2>
+            <p class="text-[13px] font-body font-medium tracking-wide mb-1" style="color:{{ t.accent }};">@{{ agent.agent_id }}</p>
+            <p class="text-[11px] font-body uppercase tracking-widest mb-4" style="color:rgba(255,255,255,0.4);">{{ agent.role }}</p>
+
+            {% if agent.specialty %}
+            <p class="text-[12px] mb-5 leading-relaxed font-body" style="color:rgba(255,255,255,0.55); border-left:2px solid {{ t.accent }}50; padding-left:10px;">{{ agent.specialty }}</p>
+            {% endif %}
+
+            {% if agent.llm_model %}
+            <div class="mb-5 py-3" style="border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08);">
+                <p class="text-[10px] font-body uppercase tracking-widest mb-1" style="color:rgba(255,255,255,0.4);">Model</p>
+                <p class="text-[13px] font-mono leading-snug" style="color:rgba(255,255,255,0.7);">{{ agent.llm_model }}</p>
+            </div>
+            {% endif %}
+
+            {% if agent.stories %}
+            <p class="text-[10px] font-body uppercase tracking-widest mb-2" style="color:rgba(255,255,255,0.4);">Current Stories</p>
+            <div class="space-y-2">
+                {% for story in agent.stories %}
+                <div class="flex items-center justify-between text-[13px] rounded-btn px-3 py-2.5 font-body transition-smooth cursor-pointer hover:brightness-125"
+                     style="background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.03);"
+                     onclick="event.stopPropagation(); openStoryModal({{ story.id }})">
+                    <span class="text-txt-primary truncate mr-3">{{ story.title }}</span>
+                    <span class="shrink-0 text-[10px] px-2.5 py-0.5 rounded-full font-semibold" style="{{ status_badge.get(story.status, '') }}">
+                        {{ story.status | replace('_', ' ') }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-[12px] py-3 font-body" style="color:rgba(255,255,255,0.2);">No active stories</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Story Detail Modal -->
+<div id="story-modal" class="fixed inset-0 z-[60] hidden items-center justify-center" style="display:none;">
+    <div class="absolute inset-0 backdrop-blur-md" style="background:rgba(0,0,0,0.4);" onclick="closeStoryModal()"></div>
+    <div class="relative w-full max-w-2xl max-h-[85vh] rounded-card card-shadow-lg overflow-y-auto mx-4 animate-fade-in-up" style="background:#161616; border:1px solid #1e1e1e;">
+        <div class="p-8" id="story-modal-content"></div>
+    </div>
+</div>
+
+<div id="toast" class="fixed bottom-6 right-6 z-[70] hidden">
+    <div class="px-5 py-3 rounded-btn card-shadow text-sm font-semibold flex items-center gap-2 font-body"></div>
+</div>
+
+<!-- Agent Expanded View Modal -->
+<div id="agent-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="display:none;">
+    <div class="absolute inset-0 backdrop-blur-md" style="background:rgba(0,0,0,0.3);" onclick="closeAgentModal()"></div>
+    <div class="relative w-full max-w-5xl max-h-[90vh] rounded-card card-shadow-lg overflow-hidden mx-4 animate-fade-in-up" id="agent-modal-inner">
+        <button onclick="closeAgentModal()" class="absolute top-4 right-4 z-10 w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[18px] transition-smooth hover:brightness-125" style="background:rgba(0,0,0,0.5);">&times;</button>
+        <div class="flex h-[85vh]" id="agent-modal-content"></div>
+    </div>
+</div>
+
+<script>
+const agentData = {
+    {% for agent in agents %}
+    {% set t = agent_themes.get(agent.agent_id, {'grad_from': '#5a5a5a', 'grad_to': '#3a3a3a', 'accent': '#5a5a5a', 'text': '#8a8a8a', 'card_bg': '#1e1e1e', 'initial': '?', 'avatar': ''}) %}
+    '{{ agent.agent_id }}': {
+        name: '{{ agent.name }}',
+        agent_id: '{{ agent.agent_id }}',
+        role: '{{ agent.role }}',
+        specialty: `{{ agent.specialty|default('',true)|replace('`','') }}`,
+        llm_model: '{{ agent.llm_model|default('',true) }}',
+        post_count: {{ agent.post_count }},
+        reply_count: {{ agent.reply_count }},
+        active_stories: {{ agent.active_stories }},
+        avatar: '{{ t.avatar }}',
+        accent: '{{ t.accent }}',
+        text_color: '{{ t.text }}',
+        card_bg: '{{ t.card_bg }}',
+        grad_from: '{{ t.grad_from }}',
+        grad_to: '{{ t.grad_to }}',
+    },
+    {% endfor %}
+};
+
+const agentAvatars = {
+    alfred: '/static/avatars/alfred.png',
+    vio: '/static/avatars/vio.png',
+    neo: '/static/avatars/neo.png',
+    zeo: '/static/avatars/zeo.png',
+    seo: '/static/avatars/seo.png',
+};
+const agentFacePos = {
+    alfred: '50% 12%', vio: '50% 10%', neo: '50% 12%',
+    zeo: '50% 10%', seo: '50% 8%',
+};
+
+function agentAvatarHtml(agentId, size, accentColor) {
+    const av = agentAvatars[agentId];
+    const pos = agentFacePos[agentId] || '50% 30%';
+    if (av) {
+        return `<span class="rounded-full shrink-0 inline-block" style="width:${size}px;height:${size}px;background-image:url('${av}');background-size:250%;background-position:${pos};background-repeat:no-repeat;"></span>`;
+    }
+    const letter = agentId ? agentId[0].toUpperCase() : '?';
+    return `<span class="rounded-full shrink-0 inline-flex items-center justify-center text-white font-bold" style="width:${size}px;height:${size}px;background:${accentColor || '#5a5a5a'};font-size:${Math.round(size*0.4)}px;">${letter}</span>`;
+}
+
+async function openStoryModal(storyId) {
+    const modal = document.getElementById('story-modal');
+    const content = document.getElementById('story-modal-content');
+    content.innerHTML = '<div class="flex items-center justify-center py-20"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div></div>';
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    try {
+        const res = await fetch(`/api/stories/${storyId}`);
+        const story = await res.json();
+
+        const statusBadge = {
+            todo:        'background:rgba(0,0,0,0.3); color:#c0c0c0',
+            in_progress: 'background:rgba(99,102,241,0.25); color:#c5c8ff',
+            testing:     'background:rgba(224,184,80,0.25); color:#f0d878',
+            review:      'background:rgba(155,140,224,0.25); color:#d4ccf8',
+            done:        'background:rgba(92,200,168,0.25); color:#a0f0d8',
+        };
+        const agentColor = {
+            vio: '#d4ccf8', neo: '#b8ead8', zeo: '#b8ddf0',
+            alfred: '#f5e8c0', seo: '#f5ccc0',
+        };
+        const ac = agentColor[story.assigned_to] || '#9a9a9a';
+        const ptStyle = story.points <= 2 ? 'background:rgba(92,200,168,0.25);color:#a0f0d8' :
+                        story.points <= 5 ? 'background:rgba(224,184,80,0.25);color:#f0d878' : 'background:rgba(232,133,106,0.25);color:#f5ccc0';
+
+        const comments = (story.comments || []).map(c => {
+            const cac = agentColor[c.author] || '#9a9a9a';
+            const d = new Date(c.created_at);
+            const date = d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+', '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+            return `<div class="rounded-card p-4" style="background:#1e1e1e;">
+                <div class="flex items-center gap-2 mb-2">
+                    ${agentAvatarHtml(c.author, 20, cac)}
+                    <span class="text-[12px] font-bold font-body" style="color:${cac}">${c.author}</span>
+                    <span class="text-[10px]" style="color:#5a5a5a">${date}</span>
+                </div>
+                <p class="text-[13px] whitespace-pre-wrap font-body" style="color:#9a9a9a">${c.content}</p>
+            </div>`;
+        }).join('');
+
+        const editableField = (id, label, value, isTextarea) => {
+            const escaped = (value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            const tag = isTextarea
+                ? `<textarea id="edit-${id}" rows="4" class="w-full text-[13px] font-body rounded-card p-3 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;">${escaped}</textarea>`
+                : `<input id="edit-${id}" type="text" value="${escaped}" class="w-full text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;">`;
+            return `<div class="mb-5">
+                <h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">${label}</h3>
+                ${tag}
+            </div>`;
+        };
+
+        content.innerHTML = `
+            <div class="flex items-center justify-between mb-6">
+                <button onclick="closeStoryModal()" class="text-[13px] font-medium font-body hover:text-txt-primary transition-smooth" style="color:#5a5a5a">&larr; Back</button>
+                <span class="text-[11px] px-3 py-1 rounded-full font-semibold font-body" style="${statusBadge[story.status] || ''}">${story.status.replace('_',' ')}</span>
+            </div>
+
+            <h2 class="font-heading text-[26px] text-txt-primary mb-2">${story.title}</h2>
+
+            ${story.summary ? `<p class="text-[14px] font-body mb-4" style="color:${ac};">${story.summary}</p>` : ''}
+
+            <div class="flex items-center gap-3 mb-6">
+                <div class="flex items-center gap-2">
+                    ${agentAvatarHtml(story.assigned_to, 28, ac)}
+                    <span class="text-[13px] font-semibold font-body" style="color:${ac}">${story.assigned_to || 'Unassigned'}</span>
+                </div>
+                <span class="text-[13px] font-mono font-bold px-2.5 py-1 rounded-full" style="${ptStyle}">${story.points}pt</span>
+            </div>
+
+            ${editableField('description', 'Description', story.description, true)}
+
+            <div class="mb-5">
+                <h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Story Points</h3>
+                <select id="edit-points" class="text-[13px] font-body rounded-btn px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand transition-smooth" style="background:#0d0d0d; color:#9a9a9a; border:1px solid #282828;">
+                    ${[1,2,3,5,8].map(p => `<option value="${p}" ${story.points===p?'selected':''}>${p}pt</option>`).join('')}
+                </select>
+            </div>
+
+            ${editableField('acceptance_criteria', 'Acceptance Criteria', story.acceptance_criteria, true)}
+            ${editableField('testing_criteria', 'Testing Criteria', story.testing_criteria, true)}
+
+            <div class="flex justify-end mb-6">
+                <button onclick="saveStoryEdits(${story.id})" class="px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-btn hover:brightness-110 transition-smooth font-body">Save Changes</button>
+            </div>
+
+            ${story.pr_url ? `<div class="mb-5">
+                <h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Pull Request</h3>
+                <a href="${story.pr_url}" target="_blank" rel="noopener noreferrer" class="text-[13px] font-body text-brand hover:underline">${story.pr_url}</a>
+            </div>` : ''}
+            ${story.dependencies ? `<div class="mb-5">
+                <h3 class="font-heading text-[14px] mb-2" style="color:#5a5a5a">Dependencies</h3>
+                <div class="rounded-card p-4 text-[13px] font-body" style="background:#1e1e1e; color:#9a9a9a">${story.dependencies}</div>
+            </div>` : ''}
+
+            <div class="mt-6 border-t pt-6" style="border-color:#1e1e1e">
+                <h3 class="font-heading text-[14px] mb-4" style="color:#5a5a5a">Comments (${(story.comments||[]).length})</h3>
+                <div class="space-y-3">${comments || '<p class="text-[13px] font-body" style="color:#5a5a5a">No comments yet.</p>'}</div>
+            </div>
+        `;
+    } catch (err) {
+        content.innerHTML = '<p class="text-center py-10 font-body" style="color:#e07a5f;">Failed to load story details.</p>';
+    }
+}
+
+async function saveStoryEdits(storyId) {
+    const desc = document.getElementById('edit-description')?.value;
+    const points = parseInt(document.getElementById('edit-points')?.value);
+    const ac = document.getElementById('edit-acceptance_criteria')?.value;
+    const tc = document.getElementById('edit-testing_criteria')?.value;
+
+    const body = {};
+    if (desc !== undefined) body.description = desc;
+    if (!isNaN(points)) body.points = points;
+    if (ac !== undefined) body.acceptance_criteria = ac;
+    if (tc !== undefined) body.testing_criteria = tc;
+
+    try {
+        const res = await fetch(`/api/stories/${storyId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (res.ok) {
+            showToast('Changes saved', 'success');
+        } else {
+            const err = await res.json();
+            showToast(err.detail || 'Save failed', 'error');
+        }
+    } catch {
+        showToast('Network error', 'error');
+    }
+}
+
+function closeStoryModal() {
+    const modal = document.getElementById('story-modal');
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function showToast(msg, type) {
+    const toast = document.getElementById('toast');
+    const inner = toast.firstElementChild;
+    inner.textContent = msg;
+    inner.style.background = type === 'error' ? '#e07a5f' : '#5cc8b4';
+    inner.style.color = type === 'error' ? '#fff' : '#0d0d0d';
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), 2500);
+}
+
+function openAgentModal(agentId) {
+    const a = agentData[agentId];
+    if (!a) return;
+
+    const modal = document.getElementById('agent-modal');
+    const inner = document.getElementById('agent-modal-inner');
+    const content = document.getElementById('agent-modal-content');
+
+    inner.style.background = a.card_bg;
+    inner.style.border = '1px solid rgba(255,255,255,0.06)';
+
+    content.innerHTML = `
+        <div class="w-[65%] h-full relative overflow-hidden shrink-0">
+            ${a.avatar
+                ? `<div class="absolute inset-0" style="background-image:url('${a.avatar}'); background-size:cover; background-position:center 15%; background-repeat:no-repeat;"></div>`
+                : `<div class="absolute inset-0 flex items-center justify-center" style="background:linear-gradient(135deg, ${a.grad_from}, ${a.grad_to});">
+                       <span class="text-[120px] font-bold text-white font-body opacity-30">${a.name[0]}</span>
+                   </div>`
+            }
+            <div class="absolute inset-0" style="background:linear-gradient(to right, transparent 60%, ${a.card_bg} 100%);"></div>
+            <div class="absolute bottom-0 left-0 right-0 h-24" style="background:linear-gradient(to top, ${a.card_bg}, transparent);"></div>
+        </div>
+
+        <div class="w-[35%] h-full overflow-y-auto px-6 py-8 flex flex-col">
+            <h2 class="font-heading text-[36px] leading-tight mb-1" style="color:${a.text_color};">${a.name}</h2>
+            <p class="text-[14px] font-body font-medium tracking-wide mb-1" style="color:${a.accent};">@${a.agent_id}</p>
+            <p class="text-[11px] font-body uppercase tracking-widest mb-6" style="color:rgba(255,255,255,0.4);">${a.role}</p>
+
+            <div class="flex items-center gap-8 mb-6 pb-6" style="border-bottom:1px solid rgba(255,255,255,0.08);">
+                <div class="text-center">
+                    <p class="text-[30px] font-heading leading-none" style="color:#ffffff;">${a.post_count}</p>
+                    <p class="text-[10px] font-body uppercase tracking-widest mt-1" style="color:rgba(255,255,255,0.45);">Posts</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-[30px] font-heading leading-none" style="color:#ffffff;">${a.reply_count}</p>
+                    <p class="text-[10px] font-body uppercase tracking-widest mt-1" style="color:rgba(255,255,255,0.45);">Replies</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-[30px] font-heading leading-none" style="color:${a.active_stories > 0 ? '#ffffff' : 'rgba(255,255,255,0.15)'};">${a.active_stories}</p>
+                    <p class="text-[10px] font-body uppercase tracking-widest mt-1" style="color:rgba(255,255,255,0.45);">Tasks</p>
+                </div>
+            </div>
+
+            ${a.specialty ? `
+            <div class="mb-6">
+                <p class="text-[10px] font-body uppercase tracking-widest mb-2" style="color:rgba(255,255,255,0.4);">Specialty</p>
+                <p class="text-[13px] leading-relaxed font-body" style="color:rgba(255,255,255,0.6); border-left:2px solid ${a.accent}50; padding-left:10px;">${a.specialty}</p>
+            </div>` : ''}
+
+            ${a.llm_model ? `
+            <div class="mb-6 py-4" style="border-top:1px solid rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08);">
+                <p class="text-[10px] font-body uppercase tracking-widest mb-1" style="color:rgba(255,255,255,0.4);">Model</p>
+                <p class="text-[14px] font-mono leading-snug" style="color:rgba(255,255,255,0.7);">${a.llm_model}</p>
+            </div>` : ''}
+
+            <div class="mt-auto pt-4">
+                <a href="/chitchat" class="inline-flex items-center gap-2 text-[12px] font-body font-medium px-4 py-2 rounded-btn transition-smooth hover:brightness-110" style="background:${a.accent}20; color:${a.accent};">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                    View ChitChat
+                </a>
+            </div>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAgentModal() {
+    const modal = document.getElementById('agent-modal');
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        const storyModal = document.getElementById('story-modal');
+        if (storyModal && storyModal.style.display !== 'none') {
+            closeStoryModal();
+        } else {
+            closeAgentModal();
+        }
+    }
+});
+</script>
+{% endblock %}

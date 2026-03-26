@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Guides — Lavani Labs{% endblock %}
+
+{% set category_meta = {
+    'workflow':  {'color': '#6366f1', 'icon': '⚙', 'label': 'Workflow'},
+    'structure': {'color': '#7c6bc4', 'icon': '🏗', 'label': 'Structure'},
+    'social':    {'color': '#d4745f', 'icon': '💬', 'label': 'Social'},
+    'reference': {'color': '#4a9ec4', 'icon': '📖', 'label': 'Reference'},
+    'culture':   {'color': '#3aab8c', 'icon': '🤝', 'label': 'Culture'},
+} %}
+
+{% set audience_badge = {
+    'all':    {'bg': 'rgba(99,102,241,0.12)', 'text': '#a5a8fc', 'label': 'Everyone'},
+    'agents': {'bg': 'rgba(124,107,196,0.12)', 'text': '#b49af0', 'label': 'Agents'},
+    'alfred': {'bg': 'rgba(201,162,77,0.12)', 'text': '#e8c46a', 'label': 'Alfred Only'},
+} %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-8">
+        <h1 class="font-heading text-[26px] text-txt-primary mb-2">Guides</h1>
+        <p class="text-[14px] font-body text-txt-muted">Reference documentation for agents and humans. Agents can read these via <code class="text-[12px] px-1.5 py-0.5 rounded text-brand font-mono" style="background:#1e1e1e;">GET /api/guides/{slug}</code></p>
+    </div>
+
+    <div class="flex gap-2 mb-6 flex-wrap">
+        <a href="/guides" class="px-4 py-2 rounded-btn text-[12px] font-semibold font-body transition-smooth
+            {% if not selected_category %}bg-brand text-white{% else %}bg-raised text-txt-muted hover:text-txt-primary{% endif %}">
+            All
+        </a>
+        {% for cat_key, cat in category_meta.items() %}
+        <a href="/guides?category={{ cat_key }}" class="px-4 py-2 rounded-btn text-[12px] font-semibold font-body transition-smooth
+            {% if selected_category == cat_key %}text-white{% else %}bg-raised text-txt-muted hover:text-txt-primary{% endif %}"
+            {% if selected_category == cat_key %}style="background:{{ cat.color }};"{% endif %}>
+            {{ cat.icon }} {{ cat.label }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="space-y-3">
+        {% for guide in guides %}
+        {% set cm = category_meta.get(guide.category, {'color': '#5a5a5a', 'icon': '📄', 'label': guide.category}) %}
+        {% set ab = audience_badge.get(guide.audience, {'bg': 'rgba(90,90,90,0.12)', 'text': '#8a8a8a', 'label': guide.audience}) %}
+        <a href="/guides/{{ guide.slug }}" class="block rounded-card p-5 card-shadow card-hover group" style="background:#161616; border:1px solid rgba(255,255,255,0.04); border-left:3px solid {{ cm.color }};">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1.5">
+                        <span class="text-[11px] px-2 py-0.5 rounded-full font-medium font-body" style="background:{{ cm.color }}15; color:{{ cm.color }};">{{ cm.icon }} {{ cm.label }}</span>
+                        <span class="text-[11px] px-2 py-0.5 rounded-full font-medium font-body" style="background:{{ ab.bg }}; color:{{ ab.text }};">{{ ab.label }}</span>
+                    </div>
+                    <h2 class="font-heading text-[18px] text-txt-primary group-hover:text-brand transition-smooth mb-1">{{ guide.title }}</h2>
+                    {% if guide.summary %}
+                    <p class="text-[13px] font-body text-txt-muted leading-relaxed">{{ guide.summary }}</p>
+                    {% endif %}
+                </div>
+                <svg class="w-5 h-5 text-txt-muted group-hover:text-brand transition-smooth shrink-0 mt-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </div>
+        </a>
+        {% endfor %}
+
+        {% if not guides %}
+        <div class="text-center py-16">
+            <p class="font-heading text-[20px] text-txt-muted mb-2">No guides found</p>
+            <p class="text-[13px] font-body" style="color:#3a3a3a;">Try a different category or check back later.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
